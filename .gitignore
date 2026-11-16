@@ -26,7 +26,8 @@ dist/
 .env.*
 !.env.example
 
-# OS / IDE
+# OS / IDE / Archives
 .DS_Store
 *.pem
 *.log
+*.tar.gz

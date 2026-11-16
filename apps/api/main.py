@@ -1040,35 +1040,3 @@ async def export_executive_brief(
         },
     )
 
-
-@app.get("/api/export/repo-tarball")
-async def export_repo_tarball() -> Response:
-    """Stream a complete .tar.gz archive of the VECTRA monorepo (including .git history) for local WSL2 use."""
-    import io
-    import tarfile
-
-    buf = io.BytesIO()
-    excluded = {"node_modules", ".next", ".venv", "__pycache__", ".turbo", "vectra_intel.db"}
-
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        for item in ROOT_DIR.iterdir():
-            if item.name in excluded:
-                continue
-            tar.add(
-                str(item),
-                arcname=f"vectra/{item.name}",
-                filter=lambda ti: None
-                if any(part in excluded for part in Path(ti.name).parts)
-                else ti,
-            )
-
-    buf.seek(0)
-    return Response(
-        content=buf.read(),
-        media_type="application/gzip",
-        headers={
-            "Content-Disposition": 'attachment; filename="vectra-monorepo-with-git.tar.gz"',
-            "Access-Control-Expose-Headers": "Content-Disposition",
-        },
-    )
-

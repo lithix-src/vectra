@@ -16,7 +16,6 @@ import {
   ExternalLink,
   FileText,
   Filter,
-  GitBranch,
   KeyRound,
   Lasso,
   Layers,
@@ -674,17 +673,6 @@ export default function VectraAdvisoryWorkspace() {
             <Download className="w-3.5 h-3.5" />
             <span>{pptxDownloading ? "Generating .pptx..." : "Export .pptx Deck"}</span>
           </button>
-
-          <a
-            id="header-download-repo-tarball-btn"
-            href="/api/export/repo-tarball"
-            download="vectra-monorepo-with-git.tar.gz"
-            className="px-2.5 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 font-semibold text-xs font-mono flex items-center gap-1.5 transition"
-            title="Download full VECTRA monorepo + .git commit history (.tar.gz)"
-          >
-            <GitBranch className="w-3.5 h-3.5" />
-            <span>Repo .tar.gz</span>
-          </a>
         </div>
       </header>
 

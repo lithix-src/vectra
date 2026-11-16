@@ -91,14 +91,9 @@ uv run python scripts/vectra_cli.py verify
 The canonical Windows host directory for VECTRA is **`D:\projects\vectra`**. A developer or reviewer on Windows (with Scoop + Rancher Desktop) can instantiate the entire verified workspace in one command:
 
 ```powershell
-# Option A: Clone from GitHub directly into D:\projects\vectra
+# Clone from GitHub directly into D:\projects\vectra
 New-Item -ItemType Directory -Force -Path D:\projects | Out-Null
 git clone https://github.com/lithix-src/vectra.git D:\projects\vectra
-Set-Location D:\projects\vectra
-
-# Option B: Or extract the downloaded vectra-full-repo.tar.gz bundle into D:\projects\vectra
-New-Item -ItemType Directory -Force -Path D:\projects\vectra | Out-Null
-tar -xzf "$HOME\Downloads\vectra-full-repo.tar.gz" -C D:\projects\vectra
 Set-Location D:\projects\vectra
 
 # Run zero-to-verified product instantiation (CPython 3.15.2+, pnpm, 5-gate review, 10/10 E2E suite)

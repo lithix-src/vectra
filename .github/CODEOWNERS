@@ -1,0 +1,7 @@
+# VECTRA Architecture & Security Code Owners
+*                       @lithix-src
+/packages/db/           @lithix-src
+/apps/api/              @lithix-src
+/apps/workers/          @lithix-src
+/apps/web/              @lithix-src
+/scripts/vectra_cli.py  @lithix-src

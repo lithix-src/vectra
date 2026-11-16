@@ -45,7 +45,6 @@
 | `POST` | `/api/present/session` | Creates a Boardroom Mode presentation session (`/present/[sessionId]`). |
 | `POST` | `/api/export/pptx` | Streams a 5-slide widescreen `.pptx` presentation deck from the selected subgraph. |
 | `POST` | `/api/export/brief` | Streams a comprehensive Markdown Executive Advisory Memorandum (`VECTRA_Executive_Brief.md`, `text/markdown`) with Multi-Lens Synthesis, Variant Diff Matrix, Verified Primary Evidence Table, and 90-Day Action Plan. |
-| `GET` | `/api/export/repo-tarball` | Downloads the complete monorepo + `.git` history as a portable `.tar.gz` archive. |
 
 ---
 
