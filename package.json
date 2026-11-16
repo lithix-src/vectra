@@ -1,0 +1,27 @@
+{
+  "name": "vectra-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VECTRA — Enterprise AI Intelligence & Advisory OS (Scoop + Rancher Desktop + uv/uvx + pnpm Monorepo)",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "clean": "uv run python scripts/vectra_cli.py clean",
+    "review": "uv run python scripts/vectra_cli.py review",
+    "instantiate": "uv run python scripts/vectra_cli.py instantiate",
+    "py:setup": "uv run python scripts/vectra_cli.py setup",
+    "py:verify": "uv run python scripts/vectra_cli.py verify",
+    "py:api": "uv run python scripts/vectra_cli.py api",
+    "py:worker": "uv run python scripts/vectra_cli.py worker",
+    "infra:up": "uv run python scripts/vectra_cli.py infra-up",
+    "infra:down": "uv run python scripts/vectra_cli.py infra-down",
+    "deploy:up": "uv run python scripts/vectra_cli.py deploy-up",
+    "deploy:down": "uv run python scripts/vectra_cli.py deploy-down"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@12.21.0"
+}

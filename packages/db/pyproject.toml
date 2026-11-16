@@ -1,0 +1,16 @@
+[project]
+name = "vectra-db"
+version = "0.1.0"
+description = "VECTRA database layer: SQLAlchemy 2.0 Async, RLS context, AES-256-GCM KMS Vault, and Canonical Scoring"
+requires-python = ">=3.11"
+dependencies = [
+    "sqlalchemy>=2.0.35",
+    "aiosqlite>=0.20.0",
+    "cryptography>=43.0.0",
+    "pydantic>=2.9.0",
+    "alembic>=1.13.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

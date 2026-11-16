@@ -1,0 +1,56 @@
+# =============================================================================
+# VECTRA Full-Stack Standardized Deployment Compose (Rancher Desktop)
+# Usage:
+#   uv run python scripts/vectra_cli.py deploy-up
+#   (Runs docker-compose.yml + docker-compose.prod.yml via nerdctl or docker)
+# =============================================================================
+services:
+  vectra-api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: vectra-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      VECTRA_DATABASE_URL: ${VECTRA_DATABASE_URL:-postgresql+asyncpg://vectra:vectra_secure_password@postgres:5432/vectra_intel}
+      VECTRA_KMS_MASTER_KEY: ${VECTRA_KMS_MASTER_KEY:-vectra-enterprise-kms-master-kek-2026-erik-advisory-os}
+      TEMPORAL_ADDRESS: temporal:7233
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+
+  vectra-worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: vectra-worker
+    restart: unless-stopped
+    depends_on:
+      - temporal
+      - vectra-api
+    working_dir: /app/apps/workers
+    command: ["python", "worker.py"]
+    environment:
+      VECTRA_DATABASE_URL: ${VECTRA_DATABASE_URL:-postgresql+asyncpg://vectra:vectra_secure_password@postgres:5432/vectra_intel}
+      VECTRA_KMS_MASTER_KEY: ${VECTRA_KMS_MASTER_KEY:-vectra-enterprise-kms-master-kek-2026-erik-advisory-os}
+      TEMPORAL_ADDRESS: temporal:7233
+
+  vectra-web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://vectra-api:8000
+    container_name: vectra-web
+    restart: unless-stopped
+    depends_on:
+      - vectra-api
+    environment:
+      NEXT_PUBLIC_API_URL: http://vectra-api:8000
+    ports:
+      - "3000:3000"

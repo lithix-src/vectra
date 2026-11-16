@@ -1,0 +1,20 @@
+[project]
+name = "vectra-workers"
+version = "0.1.0"
+description = "VECTRA Temporal.io Python workers for multi-tier scraping, OAuth PKCE token refresh, and canonical graph clustering"
+requires-python = ">=3.11"
+dependencies = [
+    "temporalio>=1.7.1",
+    "pydantic>=2.9.0",
+    "vectra-db",
+]
+
+[tool.uv.sources]
+vectra-db = { path = "../../packages/db", editable = true }
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["worker"]
