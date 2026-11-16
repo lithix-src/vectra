@@ -158,6 +158,9 @@ class CopilotStructuredResponse(BaseModel):
     llm_model: str = "qwen2.5:14b-instruct"
     execution_mode: Literal["local_llm", "deterministic_local_fallback"] = "deterministic_local_fallback"
     commercial_models_blocked: bool = True
+    mcp_mediated: bool = True
+    mcp_tools_invoked: List[str] = Field(default_factory=list)
+    mcp_audit_ids: List[str] = Field(default_factory=list)
     latency_ms: float = 0.0
 
 
@@ -371,6 +374,137 @@ async def update_local_llm_runtime_config(req: LocalLLMConfig) -> Dict[str, Any]
 async def create_local_embedding(req: LocalEmbedRequest) -> Dict[str, Any]:
     """Compute a 1536-d vector embedding using the configured local embedding model (with deterministic fallback)."""
     return await embed_text_local_1536(req.text)
+
+
+# =============================================================================
+# Zero-Trust Model Context Protocol (MCP) Gateway & JSON-RPC 2.0 Broker
+# =============================================================================
+
+from mcp_gateway import (  # noqa: E402
+    MCPGatewayPolicyConfig,
+    MCPJsonRpcRequest,
+    MCPPolicyViolationError,
+    MCPServerDefinition,
+    MCPZeroTrustGateway,
+)
+
+mcp_gateway = MCPZeroTrustGateway()
+
+
+async def _mcp_tool_get_rls_subgraph(
+    *, arguments: Dict[str, Any], tenant_user_id: str, tenant_org_id: str
+) -> Dict[str, Any]:
+    tenant = TenantContext(user_id=tenant_user_id, org_id=tenant_org_id)
+    vertical = str(arguments.get("vertical") or "All Verticals")
+    graph = await _build_rls_graph_payload(tenant=tenant, vertical=vertical)
+    req_ids = set(arguments.get("node_ids") or [])
+    nodes = [n for n in graph["nodes"] if n["id"] in req_ids] if req_ids else graph["nodes"][:4]
+    node_set = {n["id"] for n in nodes}
+    edges = [
+        e for e in graph["edges"] if e["source_node_id"] in node_set and e["target_node_id"] in node_set
+    ]
+    return {"nodes": nodes, "edges": edges}
+
+
+async def _mcp_tool_get_verified_citations(
+    *, arguments: Dict[str, Any], tenant_user_id: str, tenant_org_id: str
+) -> Dict[str, Any]:
+    tenant = TenantContext(user_id=tenant_user_id, org_id=tenant_org_id)
+    graph = await _build_rls_graph_payload(tenant=tenant, vertical="All Verticals")
+    req_ids = set(arguments.get("node_ids") or [])
+    nodes = [n for n in graph["nodes"] if n["id"] in req_ids] if req_ids else graph["nodes"][:4]
+    citations: List[Dict[str, Any]] = []
+    for n in nodes:
+        for s in n.get("sources", []):
+            citations.append(
+                {
+                    "source_id": s["id"],
+                    "node_title": n["title"],
+                    "source_name": s["source_name"],
+                    "direct_url": s["direct_url"],
+                    "provenance_license": s["provenance_license"],
+                    "exact_quote": s["exact_quote"],
+                }
+            )
+    return {"citations": citations}
+
+
+async def _mcp_tool_get_consultant_notes(
+    *, arguments: Dict[str, Any], tenant_user_id: str, tenant_org_id: str
+) -> Dict[str, Any]:
+    tenant = TenantContext(user_id=tenant_user_id, org_id=tenant_org_id)
+    graph = await _build_rls_graph_payload(tenant=tenant, vertical="All Verticals")
+    req_ids = set(arguments.get("node_ids") or [])
+    nodes = [n for n in graph["nodes"] if n["id"] in req_ids] if req_ids else graph["nodes"][:4]
+    notes = [
+        {"node_id": n["id"], "node_title": n["title"], "consultant_note": n["consultant_note"]}
+        for n in nodes
+        if n.get("consultant_note")
+    ]
+    return {"notes": notes}
+
+
+async def _mcp_tool_inspect_cypher(
+    *, arguments: Dict[str, Any], tenant_user_id: str, tenant_org_id: str
+) -> Dict[str, Any]:
+    vertical = str(arguments.get("vertical") or "All Verticals")
+    return await get_apache_age_cypher_query(vertical=vertical, tenant_user_id=tenant_user_id)
+
+
+async def _mcp_tool_compute_embedding(
+    *, arguments: Dict[str, Any], tenant_user_id: str, tenant_org_id: str
+) -> Dict[str, Any]:
+    return await embed_text_local_1536(str(arguments.get("text") or ""))
+
+
+mcp_gateway.register_tool_handler("vectra_get_rls_subgraph", _mcp_tool_get_rls_subgraph)
+mcp_gateway.register_tool_handler("vectra_get_verified_citations", _mcp_tool_get_verified_citations)
+mcp_gateway.register_tool_handler("vectra_get_consultant_notes", _mcp_tool_get_consultant_notes)
+mcp_gateway.register_tool_handler("vectra_inspect_cypher", _mcp_tool_inspect_cypher)
+mcp_gateway.register_tool_handler("vectra_compute_local_embedding", _mcp_tool_compute_embedding)
+
+
+@app.get("/api/mcp/status")
+async def get_mcp_gateway_status() -> Dict[str, Any]:
+    """Return Zero-Trust MCP Gateway policy, registered MCP servers/tools, and immutable audit log."""
+    return mcp_gateway.get_status()
+
+
+@app.post("/api/mcp/policy")
+async def update_mcp_gateway_policy(req: MCPGatewayPolicyConfig) -> Dict[str, Any]:
+    """Update Zero-Trust MCP Gateway policy (rejects enabling unproxied stdio or direct DB access)."""
+    try:
+        mcp_gateway.update_policy(req)
+    except MCPPolicyViolationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return mcp_gateway.get_status()
+
+
+@app.post("/api/mcp/servers")
+async def register_mcp_server(req: MCPServerDefinition) -> Dict[str, Any]:
+    """Register or update an MCP server definition (blocks unproxied stdio transport)."""
+    try:
+        mcp_gateway.register_or_update_server(req)
+    except MCPPolicyViolationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return mcp_gateway.get_status()
+
+
+@app.post("/api/mcp/rpc")
+async def handle_mcp_jsonrpc_endpoint(
+    req: MCPJsonRpcRequest,
+    tenant_user_id: str = Query(default="erik"),
+    tenant_org_id: str = Query(default="vectra-advisory"),
+) -> Dict[str, Any]:
+    """Execute a Zero-Trust Model Context Protocol (MCP) JSON-RPC 2.0 request."""
+    try:
+        return await mcp_gateway.handle_jsonrpc(
+            req,
+            tenant_user_id=tenant_user_id,
+            tenant_org_id=tenant_org_id,
+        )
+    except MCPPolicyViolationError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 @app.get("/api/graph")
@@ -801,30 +935,16 @@ async def query_subgraph_copilot(
     tenant_user_id: str = Query(default="erik"),
     tenant_org_id: str = Query(default="vectra-advisory"),
 ) -> CopilotStructuredResponse:
-    """Serialize lasso-selected nodes, edges, quotes, and Erik's private field notes into strict RAG context."""
-    tenant = TenantContext(user_id=tenant_user_id, org_id=tenant_org_id)
-    graph = await _build_rls_graph_payload(tenant=tenant, vertical="All Verticals")
-
-    selected_set = set(req.node_ids)
-    selected_nodes = [n for n in graph["nodes"] if n["id"] in selected_set] if selected_set else graph["nodes"][:4]
-    selected_ids = {n["id"] for n in selected_nodes}
-    selected_edges = [
-        e for e in graph["edges"] if e["source_node_id"] in selected_ids and e["target_node_id"] in selected_ids
-    ]
-
-    citations: List[CopilotCitationRef] = []
-    for n in selected_nodes:
-        for s in n.get("sources", []):
-            citations.append(
-                CopilotCitationRef(
-                    source_id=s["id"],
-                    node_title=n["title"],
-                    source_name=s["source_name"],
-                    direct_url=s["direct_url"],
-                    provenance_license=s["provenance_license"],
-                    exact_quote=s["exact_quote"],
-                )
-            )
+    """Assemble RAG context strictly via the Zero-Trust MCP Gateway (zero direct model DB access)."""
+    mcp_envelope = await mcp_gateway.build_rag_mcp_envelope(
+        node_ids=req.node_ids,
+        vertical=req.industry_vertical,
+        tenant_user_id=tenant_user_id,
+        tenant_org_id=tenant_org_id,
+    )
+    selected_nodes = mcp_envelope.payload["nodes"]
+    selected_edges = mcp_envelope.payload["edges"]
+    citations = [CopilotCitationRef(**c) for c in mcp_envelope.payload["citations"]]
 
     node_titles = ", ".join(n["title"] for n in selected_nodes)
     pub_count = sum(1 for c in citations if c.provenance_license == "public")
@@ -846,16 +966,16 @@ async def query_subgraph_copilot(
             primary_summaries.append(f"• {n['title']}: {n['summary_executive']}")
 
     notes_included = [
-        f"Erik's Note on '{n['title']}': {n['consultant_note']}"
-        for n in selected_nodes
-        if n.get("consultant_note")
+        f"Erik's Note on '{note['node_title']}': {note['consultant_note']}"
+        for note in mcp_envelope.payload["notes"]
     ]
 
     exec_answer = (
-        f"[{lens_label}] Scoped strictly to your {len(selected_nodes)} lassoed canonical nodes ({node_titles}) "
+        f"[{lens_label}] Scoped strictly via Zero-Trust MCP Gateway ({', '.join(mcp_envelope.tools_invoked)}) "
+        f"to your {len(selected_nodes)} lassoed canonical nodes ({node_titles}) "
         f"and {len(citations)} verified citations ({pub_count} [Public], {sub_count} [Subscriber Licensed]): "
         f"Regarding \"{req.question}\" — Enterprise production telemetry demonstrates that bounded, deterministic "
-        f"architectures (Temporal DAGs + grammar-constrained vLLM + consolidated PostgreSQL 17 pgvector/AGE with RLS) "
+        f"architectures (Temporal DAGs + grammar-constrained local LLMs + consolidated PostgreSQL 17 pgvector/AGE with RLS) "
         f"deliver 48–64% verified cost/queue compression, whereas unconstrained multi-agent swarms and unproxied "
         f"desktop MCP tools fail audit and latency gates. "
         + (" ".join(primary_summaries[:2]))
@@ -873,7 +993,7 @@ async def query_subgraph_copilot(
     actions_90d = [
         "Days 1–30: Enforce EU AI Act Annex IV & OCC SR 11-7 citation provenance gates; block unproxied stdio MCP servers.",
         "Days 31–60: Consolidate vector/graph retrieval onto PostgreSQL 17 (pgvector HNSW + Apache AGE) with tenant RLS isolation.",
-        "Days 61–90: Deploy disaggregated prefill/decode vLLM serving and deterministic Temporal state machines for production sign-off.",
+        "Days 61–90: Deploy disaggregated prefill/decode vLLM / Ollama local serving and deterministic Temporal state machines.",
     ]
 
     fallback_gen = CopilotLLMGeneration(
@@ -892,6 +1012,7 @@ async def query_subgraph_copilot(
         citations_summary=[c.model_dump() for c in citations],
         notes_included=notes_included,
         fallback_generation=fallback_gen,
+        mcp_envelope=mcp_envelope,
     )
     gen: CopilotLLMGeneration = rag_result["generation"]
 
@@ -907,6 +1028,9 @@ async def query_subgraph_copilot(
         llm_model=rag_result["llm_model"],
         execution_mode=rag_result["execution_mode"],
         commercial_models_blocked=rag_result["commercial_models_blocked"],
+        mcp_mediated=True,
+        mcp_tools_invoked=mcp_envelope.tools_invoked,
+        mcp_audit_ids=mcp_envelope.audit_ids,
         latency_ms=rag_result["latency_ms"],
     )
 

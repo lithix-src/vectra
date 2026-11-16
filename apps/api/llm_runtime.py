@@ -375,13 +375,17 @@ async def generate_local_rag_synthesis(
     citations_summary: List[Dict[str, Any]],
     notes_included: List[str],
     fallback_generation: CopilotLLMGeneration,
+    mcp_envelope: Any = None,
     config: LocalLLMConfig | None = None,
 ) -> Dict[str, Any]:
     """Execute grammar-constrained Subgraph RAG synthesis against local Ollama / LiteLLM / vLLM / llama.cpp.
 
-    Never calls commercial cloud endpoints. Falls back cleanly to `fallback_generation` if the local
-    inference daemon is not currently running.
+    Requires a cryptographically verified `MCPMediatedEnvelope` from `mcp_gateway.py` so the model
+    never accesses backend services or database sessions directly.
     """
+    from mcp_gateway import verify_mcp_envelope
+
+    verify_mcp_envelope(mcp_envelope)
     cfg = config or get_active_llm_config()
     validate_sovereign_local_policy(cfg)
     start = time.perf_counter()

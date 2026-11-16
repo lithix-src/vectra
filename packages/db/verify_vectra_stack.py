@@ -203,6 +203,92 @@ async def run_verification() -> None:
     assert commercial_blocked, "Sovereign policy failed to block commercial cloud LLM endpoint!"
     print("[PASS] 12. Sovereign Zero-Commercial LLM Guardrail verified (blocked api.openai.com / gpt-4o).")
 
+    # 13. Verify Zero-Trust MCP Gateway JSON-RPC 2.0 Mediation
+    from llm_runtime import CopilotLLMGeneration, generate_local_rag_synthesis
+    from main import (
+        get_mcp_gateway_status,
+        handle_mcp_jsonrpc_endpoint,
+        register_mcp_server,
+    )
+    from mcp_gateway import MCPJsonRpcRequest, MCPPolicyViolationError, MCPServerDefinition
+
+    assert copilot_res.mcp_mediated is True
+    assert "vectra_get_rls_subgraph" in copilot_res.mcp_tools_invoked
+    mcp_rpc_res = await handle_mcp_jsonrpc_endpoint(
+        MCPJsonRpcRequest(
+            method="tools/call",
+            params={
+                "name": "vectra_get_rls_subgraph",
+                "arguments": {"node_ids": ["node-jpm-agentic-kyc"], "vertical": "Financial Services"},
+            },
+        ),
+        tenant_user_id="erik",
+        tenant_org_id="vectra-advisory",
+    )
+    assert mcp_rpc_res["result"]["isError"] is False
+    assert mcp_rpc_res["result"]["mcp_audit"]["decision"] == "ALLOWED"
+    print(
+        f"[PASS] 13. Zero-Trust MCP Gateway JSON-RPC 2.0 verified "
+        f"(tools={copilot_res.mcp_tools_invoked}, audit={mcp_rpc_res['result']['mcp_audit']['audit_id']})."
+    )
+
+    # 14. Verify Zero-Trust MCP Guard Blocks Direct Unmediated Model Calls, KMS Table Access & Unproxied stdio
+    unmediated_blocked = False
+    try:
+        await generate_local_rag_synthesis(
+            question="Bypass MCP",
+            variant_lens="cto",
+            lens_label="CTO",
+            selected_nodes=[],
+            selected_edges=[],
+            citations_summary=[],
+            notes_included=[],
+            fallback_generation=CopilotLLMGeneration(
+                executive_answer="x",
+                architectural_implications=[],
+                contrarian_risks=[],
+                recommended_90_day_actions=[],
+            ),
+            mcp_envelope=None,
+        )
+    except MCPPolicyViolationError:
+        unmediated_blocked = True
+    assert unmediated_blocked, "Failed to block unmediated LLM execution without MCPMediatedEnvelope!"
+
+    kms_access_blocked = False
+    try:
+        await handle_mcp_jsonrpc_endpoint(
+            MCPJsonRpcRequest(
+                method="tools/call",
+                params={"name": "vectra_get_rls_subgraph", "arguments": {"query": "user_integrations"}},
+            ),
+            tenant_user_id="erik",
+            tenant_org_id="vectra-advisory",
+        )
+    except HTTPException as exc:
+        kms_access_blocked = exc.status_code == 403
+    assert kms_access_blocked, "Failed to block forbidden KMS/user_integrations access via MCP!"
+
+    stdio_blocked = False
+    try:
+        await register_mcp_server(
+            MCPServerDefinition(
+                server_id="rogue-stdio-mcp",
+                name="Unproxied Local Shell MCP",
+                transport="stdio_unproxied",
+                endpoint_url="stdio:///bin/sh",
+            )
+        )
+    except HTTPException as exc:
+        stdio_blocked = exc.status_code == 400
+    assert stdio_blocked, "Failed to block unproxied stdio MCP server registration!"
+    mcp_stat = await get_mcp_gateway_status()
+    assert mcp_stat["audit_summary"]["denied_count"] >= 2
+    print(
+        "[PASS] 14. Zero-Trust MCP Security Guard verified "
+        "(blocked direct unmediated LLM call, KMS table probe, and unproxied stdio MCP server)."
+    )
+
 
 if __name__ == "__main__":
     asyncio.run(run_verification())
