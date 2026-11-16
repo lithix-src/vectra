@@ -139,14 +139,42 @@ def cmd_clean() -> int:
     return 0
 
 
+def _venv_ready() -> bool:
+    """Return True if .venv exists and has core VECTRA dependencies installed."""
+    py = _venv_python()
+    if py == sys.executable and not VENV_DIR.exists():
+        return False
+    probe = subprocess.run(
+        [py, "-c", "import pptx, fastapi, sqlalchemy, vectra_db"],
+        cwd=str(ROOT_DIR),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return probe.returncode == 0
+
+
+def _ensure_venv() -> int:
+    """Automatically run cmd_setup() if .venv has not been provisioned yet."""
+    if _venv_ready():
+        return 0
+    print("[vectra-cli] Local .venv not yet provisioned — running 'setup' automatically...")
+    return cmd_setup()
+
+
 def cmd_verify() -> int:
     """Run end-to-end verification suite (RLS, KMS Vault, Clustering, Wikilinks, Co-Pilot, .pptx)."""
+    rc = _ensure_venv()
+    if rc != 0:
+        return rc
     py = _venv_python()
     return _run([py, str(ROOT_DIR / "packages" / "db" / "verify_vectra_stack.py")])
 
 
 def cmd_review() -> int:
     """Execute full Team Code Review & Architecture Audit gate."""
+    rc = _ensure_venv()
+    if rc != 0:
+        return rc
     print("=====================================================================")
     print("VECTRA TEAM CODE REVIEW & ARCHITECTURE AUDIT GATE")
     print("=====================================================================")
@@ -248,6 +276,9 @@ def cmd_instantiate() -> int:
 
 def cmd_api() -> int:
     """Start the FastAPI backend on port 8000."""
+    rc = _ensure_venv()
+    if rc != 0:
+        return rc
     py = _venv_python()
     return _run(
         [py, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
@@ -257,6 +288,9 @@ def cmd_api() -> int:
 
 def cmd_worker() -> int:
     """Start the Temporal.io Python worker."""
+    rc = _ensure_venv()
+    if rc != 0:
+        return rc
     py = _venv_python()
     return _run([py, "worker.py"], cwd=ROOT_DIR / "apps" / "workers")
 
