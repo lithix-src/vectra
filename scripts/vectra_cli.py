@@ -57,10 +57,48 @@ def _venv_python() -> str:
     return sys.executable
 
 
-def _pnpm_bin() -> str:
+def _pnpm_cmd() -> list[str]:
+    """Return a working pnpm command list, bypassing broken Windows Node Corepack shims."""
+    candidates: list[list[str]] = []
     if os.name == "nt":
-        return shutil.which("pnpm.cmd") or shutil.which("pnpm") or "pnpm"
-    return shutil.which("pnpm") or "pnpm"
+        user_profile = Path(os.environ.get("USERPROFILE", str(Path.home())))
+        scoop_pnpm_exe = user_profile / "scoop" / "apps" / "pnpm" / "current" / "pnpm.exe"
+        scoop_shim_exe = user_profile / "scoop" / "shims" / "pnpm.exe"
+        for exe_path in (scoop_pnpm_exe, scoop_shim_exe):
+            if exe_path.exists():
+                candidates.append([str(exe_path)])
+        for name in ("pnpm.exe", "pnpm.cmd", "pnpm"):
+            found = shutil.which(name)
+            if found:
+                candidates.append([found])
+        npx_bin = shutil.which("npx.cmd") or shutil.which("npx")
+        if npx_bin:
+            candidates.append([npx_bin, "--yes", "pnpm@10"])
+    else:
+        found = shutil.which("pnpm")
+        if found:
+            candidates.append([found])
+
+    env = os.environ.copy()
+    env["COREPACK_ENABLE_PROJECT_SPEC"] = "0"
+    env["COREPACK_ENABLE_STRICT"] = "0"
+
+    for cmd in candidates:
+        try:
+            probe = subprocess.run(
+                [*cmd, "--version"],
+                cwd=str(ROOT_DIR),
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=15,
+            )
+            if probe.returncode == 0:
+                return cmd
+        except Exception:
+            continue
+
+    return ["pnpm"]
 
 
 def _compose_cmd() -> list[str]:
@@ -72,7 +110,10 @@ def _compose_cmd() -> list[str]:
 
 def _run(cmd: list[str], cwd: Path = ROOT_DIR) -> int:
     print(f"[vectra-cli] $ {' '.join(cmd)} (cwd={cwd})")
-    proc = subprocess.run(cmd, cwd=str(cwd))
+    env = os.environ.copy()
+    env["COREPACK_ENABLE_PROJECT_SPEC"] = "0"
+    env["COREPACK_ENABLE_STRICT"] = "0"
+    proc = subprocess.run(cmd, cwd=str(cwd), env=env)
     return proc.returncode
 
 
@@ -287,7 +328,7 @@ def cmd_instantiate() -> int:
         return rc
 
     if not (ROOT_DIR / "node_modules").exists():
-        rc = _run([_pnpm_bin(), "install", "--ignore-scripts"], cwd=ROOT_DIR)
+        rc = _run([*_pnpm_cmd(), "install", "--ignore-scripts"], cwd=ROOT_DIR)
         if rc != 0:
             return rc
 
@@ -327,21 +368,26 @@ def cmd_dev() -> int:
     if rc != 0:
         return rc
 
+    pnpm_cmd = _pnpm_cmd()
     if not (ROOT_DIR / "node_modules").exists():
-        rc = _run([_pnpm_bin(), "install", "--ignore-scripts"], cwd=ROOT_DIR)
+        rc = _run([*pnpm_cmd, "install", "--ignore-scripts"], cwd=ROOT_DIR)
         if rc != 0:
             return rc
 
     py = _venv_python()
-    pnpm = _pnpm_bin()
+    env = os.environ.copy()
+    env["COREPACK_ENABLE_PROJECT_SPEC"] = "0"
+    env["COREPACK_ENABLE_STRICT"] = "0"
     print("[vectra-cli] Starting FastAPI (:8000) and Next.js 15 Advisory OS (:3000)...")
     api_proc = subprocess.Popen(
         [py, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"],
         cwd=str(ROOT_DIR / "apps" / "api"),
+        env=env,
     )
     web_proc = subprocess.Popen(
-        [pnpm, "--filter", "@vectra/web", "dev"],
+        [*pnpm_cmd, "--filter", "@vectra/web", "dev"],
         cwd=str(ROOT_DIR),
+        env=env,
     )
     try:
         return web_proc.wait()
