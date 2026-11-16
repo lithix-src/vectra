@@ -28,6 +28,9 @@
 | `refresh_x_oauth2_tokens_activity` | `@activity.defn` | Decrypts Erik's `x_oauth2` refresh token in memory, rotates the token pair, and re-seals the `AES-256-GCM` envelope. |
 | `cluster_and_attach_source_activity` | `@activity.defn` | Embeds incoming intelligence (`1536-d`), computes cosine similarity against active 14-day Canonical Nodes, and attaches the source citation with RLS visibility. |
 | `collect_public_enterprise_feeds_activity` | `@activity.defn` | Collects Fortune 500 engineering blogs (Netflix, Stripe, Airbnb), SEC EDGAR `8-K`/`10-K` filings, and NIST AI RMF / EU AI Act / FDA feeds. |
+| `run_collector_pack` (`tasks.py`) | `async def` | Executes curated or live RSS/Atom/SEC EDGAR collector packs (`f500_ai_capex`, `sec_edgar_8k`, `nist_eu_ai_act`) and updates worker schedule telemetry. |
+| `configure_collector_schedule` (`tasks.py`) | `def` | Updates polling intervals and enabled flags for scheduled collector packs. |
+| `parse_rss_or_atom_xml` (`tasks.py`) | `def` | Standards-compliant RSS 2.0 / Atom XML parser for external engineering blogs and SEC EDGAR feeds. |
 
 ---
 

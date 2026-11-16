@@ -47,10 +47,14 @@ async def run_verification() -> None:
     assert any("[SUBSCRIBER EXCLUSIVE]" in q for q in jpm_quotes), "Erik's subscriber_licensed quote missing!"
     print("[PASS] 1. Multi-Tenant Row-Level Security (RLS) verified across canonical_nodes and node_sources.")
 
-    # 2. Verify AES-256-GCM Credential Vault
+    # 2. Verify AES-256-GCM Credential Vault & Per-Tenant HKDF-SHA256 Key Derivation
+    from vectra_db import derive_tenant_kek_hkdf
+
     integ_res = await list_user_integrations(tenant_user_id="erik", tenant_org_id="vectra-advisory")
     assert len(integ_res["integrations"]) == 4
-    print("[PASS] 2. AES-256-GCM Envelope Credential Vault verified (4 integrations sealed).")
+    kek_erik = derive_tenant_kek_hkdf("erik@vectra-advisory")
+    assert len(kek_erik) == 32
+    print("[PASS] 2. AES-256-GCM Envelope Credential Vault & HKDF-SHA256 tenant KEK verified (4 integrations sealed).")
 
     # 3. Verify Consultant Weight adjustment & real-time Composite Score recalculation
     weight_res = await update_node_weight(
@@ -116,19 +120,38 @@ async def run_verification() -> None:
     assert len(prs.slides) == 5
     print(f"[PASS] 7. python-pptx generated valid 5-slide executive presentation ({len(pptx_resp.body)} bytes).")
 
-    # 8. Verify Public Enterprise & Regulatory Collectors + Apache AGE Cypher Query
+    # 8. Verify Public Enterprise & Regulatory Collectors + tasks.py Scheduler + Apache AGE Cypher Query
     from main import (
+        CollectorScheduleUpdateRequest,
         CustomSignalIngestRequest,
         export_executive_brief,
         get_apache_age_cypher_query,
+        get_collector_packs_endpoint,
         ingest_custom_signal,
         run_public_enterprise_collectors,
+        update_collector_schedule_endpoint,
     )
+    from tasks import parse_rss_or_atom_xml
+
     col_res = await run_public_enterprise_collectors(collector_tier="all", tenant_user_id="erik")
     assert col_res["items_processed"] == 3
+    packs_meta = await get_collector_packs_endpoint()
+    assert len(packs_meta["packs"]) == 3
+    sched_res = await update_collector_schedule_endpoint(
+        CollectorScheduleUpdateRequest(pack_id="sec_edgar_8k", interval_minutes=15, enabled=True, run_immediately=True),
+        tenant_user_id="erik",
+        tenant_org_id="vectra-advisory",
+    )
+    assert sched_res["schedule"]["interval_minutes"] == 15
+    assert sched_res["run_result"]["items_processed"] >= 1
+    rss_parsed = parse_rss_or_atom_xml(
+        "<rss><channel><item><title>SEC 8-K AI Governance</title><link>https://sec.gov/8k</link>"
+        "<description>Verified SR 11-7 controls</description></item></channel></rss>"
+    )
+    assert len(rss_parsed) == 1
     cypher_res = await get_apache_age_cypher_query(vertical="Financial Services", tenant_user_id="erik")
     assert "vectra_knowledge_graph" in cypher_res["open_cypher_sql"]
-    print("[PASS] 8. Public Enterprise Collectors (F500 / SEC 8-K / NIST) & Apache AGE openCypher verified.")
+    print("[PASS] 8. Public Enterprise Collectors (F500 / SEC 8-K / NIST), RSS/Atom Scheduler & Apache AGE openCypher verified.")
 
     # 9. Verify Custom Interactive Field Signal Ingestion
     ingest_res = await ingest_custom_signal(
@@ -227,6 +250,44 @@ async def run_verification() -> None:
     )
     assert mcp_rpc_res["result"]["isError"] is False
     assert mcp_rpc_res["result"]["mcp_audit"]["decision"] == "ALLOWED"
+
+    mcp_packs_res = await handle_mcp_jsonrpc_endpoint(
+        MCPJsonRpcRequest(
+            method="tools/call",
+            params={"name": "vectra_list_curated_packs", "arguments": {}},
+        ),
+        tenant_user_id="erik",
+        tenant_org_id="vectra-advisory",
+    )
+    assert len(mcp_packs_res["result"]["content"][0]["json"]["packs"]) == 3
+
+    mcp_preview_res = await handle_mcp_jsonrpc_endpoint(
+        MCPJsonRpcRequest(
+            method="tools/call",
+            params={
+                "name": "vectra_preview_wikilink_edges",
+                "arguments": {
+                    "markdown_content": "Preview link to [[Model Context Protocol (MCP) Zero-Trust Enterprise Gateways]]",
+                },
+            },
+        ),
+        tenant_user_id="erik",
+        tenant_org_id="vectra-advisory",
+    )
+    assert mcp_preview_res["result"]["content"][0]["json"]["preview_edge_count"] >= 1
+
+    mcp_manifest_res = await handle_mcp_jsonrpc_endpoint(
+        MCPJsonRpcRequest(
+            method="tools/call",
+            params={
+                "name": "vectra_prepare_deliverable_manifest",
+                "arguments": {"node_ids": ["node-jpm-agentic-kyc"], "variant_lens": "c_suite"},
+            },
+        ),
+        tenant_user_id="erik",
+        tenant_org_id="vectra-advisory",
+    )
+    assert mcp_manifest_res["result"]["content"][0]["json"]["rls_verified"] is True
     print(
         f"[PASS] 13. Zero-Trust MCP Gateway JSON-RPC 2.0 verified "
         f"(tools={copilot_res.mcp_tools_invoked}, audit={mcp_rpc_res['result']['mcp_audit']['audit_id']})."

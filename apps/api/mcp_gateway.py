@@ -178,7 +178,7 @@ DEFAULT_MCP_SERVERS: Dict[str, MCPServerDefinition] = {
     ),
     "vectra-embeddings-mcp": MCPServerDefinition(
         server_id="vectra-embeddings-mcp",
-        name="VECTRA Local 1536-d Vector Embeddings & Deliverables MCP Server",
+        name="VECTRA Local 1536-d Vector Embeddings, Public Intel & Deliverables MCP Server",
         transport="mcp_internal_broker",
         endpoint_url="mcp://vectra-embeddings-mcp/v1",
         enabled=True,
@@ -186,9 +186,10 @@ DEFAULT_MCP_SERVERS: Dict[str, MCPServerDefinition] = {
         allowed_tools=[
             "vectra_compute_local_embedding",
             "vectra_list_curated_packs",
+            "vectra_run_collector_pack",
             "vectra_prepare_deliverable_manifest",
         ],
-        description="Sovereign local embedding computation (1536-d), curated packs, and deliverable manifests.",
+        description="Sovereign local embedding computation (1536-d), curated intel packs, and deliverable manifests.",
     ),
 }
 
@@ -276,10 +277,24 @@ MCP_TOOLS_CATALOG: List[Dict[str, Any]] = [
         "name": "vectra_list_curated_packs",
         "server_id": "vectra-embeddings-mcp",
         "required_scope": "graph:read",
-        "description": "List curated Public Enterprise Intelligence collector packs (Fortune 500 CapEx, SEC 8-K, NIST AI RMF).",
+        "description": "List curated Public Enterprise Intelligence collector packs (Fortune 500 CapEx, SEC 8-K, NIST AI RMF) and worker schedules.",
         "inputSchema": {
             "type": "object",
             "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "vectra_run_collector_pack",
+        "server_id": "vectra-embeddings-mcp",
+        "required_scope": "graph:read",
+        "description": "Trigger a curated or live RSS/SEC EDGAR/NIST collector pack via the Zero-Trust MCP Gateway.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "pack_id": {"type": "string", "default": "all"},
+                "allow_live_http": {"type": "boolean", "default": False},
+            },
             "required": [],
         },
     },
