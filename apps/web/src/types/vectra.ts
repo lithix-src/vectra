@@ -118,6 +118,54 @@ export interface LocalLLMStatus {
   status_detail: string;
 }
 
+export interface MCPAuditEntry {
+  audit_id: string;
+  timestamp: string;
+  tenant_user_id: string;
+  tenant_org_id: string;
+  server_id: string;
+  jsonrpc_method: string;
+  tool_or_resource: string;
+  decision: "ALLOWED" | "DENIED";
+  reason: string;
+  latency_ms: number;
+}
+
+export interface MCPGatewayStatus {
+  gateway_id: string;
+  protocol_version: string;
+  policy: {
+    enforce_mcp_mediation: boolean;
+    block_direct_model_db_access: boolean;
+    allow_unproxied_stdio: boolean;
+    redact_secrets_and_kms: boolean;
+    require_tenant_rls_binding: boolean;
+    active_scopes: string[];
+  };
+  servers: {
+    server_id: string;
+    name: string;
+    transport: string;
+    endpoint_url: string;
+    enabled: boolean;
+    allowed_scopes: string[];
+    allowed_tools: string[];
+    description: string;
+  }[];
+  tools: {
+    name: string;
+    server_id: string;
+    required_scope: string;
+    description: string;
+  }[];
+  audit_summary: {
+    total_events: number;
+    allowed_count: number;
+    denied_count: number;
+  };
+  recent_audit_log: MCPAuditEntry[];
+}
+
 export interface CopilotStructuredResponse {
   executive_answer: string;
   architectural_implications: string[];
@@ -130,5 +178,8 @@ export interface CopilotStructuredResponse {
   llm_model?: string;
   execution_mode?: "local_llm" | "deterministic_local_fallback";
   commercial_models_blocked?: boolean;
+  mcp_mediated?: boolean;
+  mcp_tools_invoked?: string[];
+  mcp_audit_ids?: string[];
   latency_ms?: number;
 }

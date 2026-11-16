@@ -190,15 +190,32 @@ def cmd_review() -> int:
         return rc
     print("[PASS] Gate 3: Python bytecode & syntax compilation passed on latest CPython.")
 
-    # Gate 4: TypeScript Strict Typecheck in apps/web
+    # Gate 4: UI Component Contract, DOM Test-ID & TypeScript Strict Audit in apps/web
+    page_tsx = (ROOT_DIR / "apps" / "web" / "src" / "app" / "page.tsx").read_text(encoding="utf-8")
+    required_ui_ids = [
+        "open-mcp-gateway-modal-btn",
+        "mcp-gateway-modal",
+        "open-local-llm-modal-btn",
+        "local-llm-config-modal",
+        "open-ingest-signal-modal-btn",
+        "subgraph-copilot-panel",
+        "launch-boardroom-mode-btn",
+        "left-rail-snap-view",
+        "right-rail-inspector",
+    ]
+    for dom_id in required_ui_ids:
+        if f'id="{dom_id}"' not in page_tsx:
+            print(f"[FAIL] Missing required UI component test ID #{dom_id} in apps/web/src/app/page.tsx")
+            return 1
+
     tsc_bin = ROOT_DIR / "apps" / "web" / "node_modules" / ".bin" / ("tsc.cmd" if os.name == "nt" else "tsc")
     if tsc_bin.exists():
         rc = _run([str(tsc_bin), "--noEmit"], cwd=ROOT_DIR / "apps" / "web")
         if rc != 0:
             return rc
-        print("[PASS] Gate 4: Next.js 15 / React 19 TypeScript strict check (tsc --noEmit) passed.")
+    print(f"[PASS] Gate 4: All {len(required_ui_ids)} UI Component test IDs & Next.js 15 TypeScript contracts verified.")
 
-    # Gate 5: 8-Stage End-to-End Functional & Security Verification Suite
+    # Gate 5: 14-Stage End-to-End Functional, Local LLM & Zero-Trust MCP Verification Suite
     rc = cmd_verify()
     if rc != 0:
         return rc

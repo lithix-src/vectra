@@ -40,6 +40,7 @@ import {
   CopilotStructuredResponse,
   LocalLLMProvider,
   LocalLLMStatus,
+  MCPGatewayStatus,
   RelationType,
   UserIntegrationItem,
   VariantLens,
@@ -154,12 +155,53 @@ export default function VectraAdvisoryWorkspace() {
     useState<string>("nomic-embed-text");
   const [llmSaving, setLLMSaving] = useState<boolean>(false);
 
+  // Zero-Trust MCP Gateway State (100% Mediated Model Context — Zero Direct DB Access)
+  const [mcpModalOpen, setMCPModalOpen] = useState<boolean>(false);
+  const [mcpStatus, setMCPStatus] = useState<MCPGatewayStatus | null>(null);
+  const [mcpTestResult, setMCPTestResult] = useState<string>("");
+
   const triggerToast = useCallback((msg: string) => {
     setStatusToast(msg);
     setTimeout(() => {
       setStatusToast((prev) => (prev === msg ? null : prev));
     }, 4500);
   }, []);
+
+  const fetchMCPGatewayStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/mcp/status`);
+      if (res.ok) {
+        const data: MCPGatewayStatus = await res.json();
+        setMCPStatus(data);
+      }
+    } catch {
+      // Keep existing state if offline
+    }
+  }, []);
+
+  const handleTestMCPToolCall = async (toolName: string) => {
+    const res = await fetch(`/api/mcp/rpc?tenant_user_id=erik&tenant_org_id=vectra-advisory`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: `ui-test-${Date.now()}`,
+        method: "tools/call",
+        params: {
+          name: toolName,
+          arguments: {
+            node_ids: lassoNodeIds.length > 0 ? lassoNodeIds : ["node-jpm-agentic-kyc"],
+            vertical: activeVertical,
+            text: "Zero-Trust MCP Gateway verification vector",
+          },
+        },
+      }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    setMCPTestResult(JSON.stringify(payload, null, 2));
+    await fetchMCPGatewayStatus();
+    triggerToast(`Executed MCP JSON-RPC 2.0 tools/call -> ${toolName}`);
+  };
 
   const fetchLocalLLMStatus = useCallback(async () => {
     try {
@@ -755,8 +797,22 @@ export default function VectraAdvisoryWorkspace() {
           </button>
         </div>
 
-        {/* Right Header Actions: Local LLM Runtime, + Ingest Signal, Cmd+K, Boardroom Mode, .pptx Export */}
+        {/* Right Header Actions: Zero-Trust MCP, Local LLM Runtime, + Ingest Signal, Cmd+K, Boardroom Mode, .pptx Export */}
         <div className="flex items-center gap-2">
+          <button
+            id="open-mcp-gateway-modal-btn"
+            type="button"
+            onClick={() => {
+              fetchMCPGatewayStatus();
+              setMCPModalOpen(true);
+            }}
+            className="px-2.5 py-1.5 rounded bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-300 text-xs font-mono flex items-center gap-1.5 transition"
+            title="Inspect Zero-Trust Model Context Protocol (MCP) Gateway, Scoped Servers, and Immutable Audit Log"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
+            <span>MCP Gateway</span>
+          </button>
+
           <button
             id="open-local-llm-modal-btn"
             type="button"
@@ -2242,6 +2298,118 @@ export default function VectraAdvisoryWorkspace() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* ZERO-TRUST MCP GATEWAY INSPECTOR MODAL (`/api/mcp/status` & `/rpc`) */}
+      {/* =================================================================== */}
+      {mcpModalOpen && (
+        <div
+          id="mcp-gateway-modal"
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setMCPModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-2xl bg-[#101722] border border-sky-500/40 rounded-lg shadow-2xl overflow-hidden max-h-[88vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 bg-[#0D131F] shrink-0">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-sky-400" />
+                <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-100">
+                  Zero-Trust MCP Gateway & Broker (100% Mediated Model Context — Zero Direct DB Access)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMCPModalOpen(false)}
+                className="text-slate-400 hover:text-slate-200 p-1 rounded bg-slate-800/80"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3 text-xs font-mono">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-[#090D14] border border-emerald-500/30 rounded p-2.5">
+                  <div className="text-[10px] text-slate-400 uppercase">Direct Model DB Access</div>
+                  <div className="text-emerald-400 font-bold mt-0.5">BLOCKED (HMAC Envelope Required)</div>
+                </div>
+                <div className="bg-[#090D14] border border-sky-500/30 rounded p-2.5">
+                  <div className="text-[10px] text-slate-400 uppercase">Unproxied stdio Servers</div>
+                  <div className="text-sky-300 font-bold mt-0.5">FORBIDDEN (HTTP/Broker Only)</div>
+                </div>
+                <div className="bg-[#090D14] border border-amber-500/30 rounded p-2.5">
+                  <div className="text-[10px] text-slate-400 uppercase">KMS & Token Redaction</div>
+                  <div className="text-amber-300 font-bold mt-0.5">ACTIVE (RLS Scoped)</div>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[10px] uppercase text-slate-400 mb-1.5">
+                  Configured MCP Servers & Scoped Tools (Click to Test JSON-RPC 2.0 `tools/call`)
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(mcpStatus?.tools || [
+                    { name: "vectra_get_rls_subgraph", server_id: "vectra-graph-mcp", required_scope: "graph:read" },
+                    { name: "vectra_get_verified_citations", server_id: "vectra-citations-mcp", required_scope: "citations:read" },
+                    { name: "vectra_get_consultant_notes", server_id: "vectra-notes-mcp", required_scope: "notes:read" },
+                    { name: "vectra_inspect_cypher", server_id: "vectra-graph-mcp", required_scope: "cypher:read" },
+                    { name: "vectra_compute_local_embedding", server_id: "vectra-embeddings-mcp", required_scope: "embeddings:compute" },
+                  ]).map((t) => (
+                    <button
+                      key={t.name}
+                      type="button"
+                      onClick={() => handleTestMCPToolCall(t.name)}
+                      className="px-2.5 py-1.5 rounded bg-[#090D14] hover:bg-sky-500/20 border border-slate-700 hover:border-sky-400 text-sky-300 text-[11px] flex items-center gap-1.5 transition"
+                    >
+                      <span>▶ {t.name}</span>
+                      <span className="text-[9px] text-slate-400">({t.required_scope})</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {mcpTestResult && (
+                <div>
+                  <div className="text-[10px] uppercase text-emerald-400 mb-1">
+                    Live JSON-RPC 2.0 `POST /api/mcp/rpc` Response
+                  </div>
+                  <pre className="bg-[#090D14] border border-slate-800 rounded p-2.5 text-[10px] text-slate-200 max-h-40 overflow-y-auto whitespace-pre-wrap">
+                    {mcpTestResult}
+                  </pre>
+                </div>
+              )}
+
+              <div>
+                <div className="text-[10px] uppercase text-slate-400 mb-1">
+                  Immutable MCP Gateway Audit Log ({mcpStatus?.audit_summary.total_events ?? 0} Events)
+                </div>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {(mcpStatus?.recent_audit_log || []).map((entry) => (
+                    <div
+                      key={entry.audit_id}
+                      className="bg-[#090D14] border border-slate-800 rounded px-2.5 py-1.5 flex items-center justify-between gap-2 text-[10px]"
+                    >
+                      <div className="truncate text-slate-300">
+                        <span
+                          className={`font-bold mr-2 ${
+                            entry.decision === "ALLOWED" ? "text-emerald-400" : "text-rose-400"
+                          }`}
+                        >
+                          [{entry.decision}]
+                        </span>
+                        <span className="text-sky-300">{entry.tool_or_resource}</span>
+                        <span className="text-slate-500 ml-2">{entry.reason}</span>
+                      </div>
+                      <span className="text-slate-500 shrink-0">{entry.latency_ms}ms</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
