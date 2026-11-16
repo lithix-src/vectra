@@ -61,14 +61,14 @@ All team operations run through [`scripts/vectra_cli.py`](file:///home/antigravi
 
 ---
 
-## 3. 5-Gate Automated Code Review & Audit (`review`)
+## 3. 5-Gate Local Pre-Commit Code Review & Audit (`review`)
 
-Before any Pull Request is merged (enforced locally via `pnpm review` and in CI via [`.github/workflows/ci-review-and-deploy.yml`](file:///home/antigravity/projects/vectra/.github/workflows/ci-review-and-deploy.yml)):
+GitHub Actions pipelines are intentionally disabled (`0% Cloud CI Dependency`). All code review and security verification gates run **100% locally before every commit** via `.git/hooks/pre-commit` and `uv run python scripts/vectra_cli.py review` (`pnpm review`):
 1. **Gate 1 — Documentation & ToC Audit**: Verifies that root `README.md`, `packages/db/README.md`, `apps/api/README.md`, `apps/workers/README.md`, and `apps/web/README.md` exist and contain `## Table of Contents`.
-2. **Gate 2 — Multi-Tenant RLS DDL Audit**: Verifies that `ALTER TABLE <tbl> ENABLE ROW LEVEL SECURITY;` is present for all 5 core tables in [`init_extensions_and_rls.sql`](file:///home/antigravity/projects/vectra/packages/db/sql/init_extensions_and_rls.sql).
+2. **Gate 2 — Multi-Tenant RLS DDL Audit**: Verifies that `ALTER TABLE <tbl> ENABLE ROW LEVEL SECURITY;` is present for all 5 core tables in [`init_extensions_and_rls.sql`](./packages/db/sql/init_extensions_and_rls.sql).
 3. **Gate 3 — Latest Standard CPython Bytecode Audit**: Compiles all Python modules across `packages/db`, `apps/api`, `apps/workers`, and `scripts` on the active `uv`-managed CPython (`3.15.2+`).
-4. **Gate 4 — Next.js 15 / React 19 TypeScript Strict Gate**: Executes `tsc --noEmit` in `apps/web` to ensure zero type regressions across the 3-Pane UI and Boardroom Mode.
-5. **Gate 5 — 8-Stage End-to-End Functional & Security Suite**: Runs [`verify_vectra_stack.py`](file:///home/antigravity/projects/vectra/packages/db/verify_vectra_stack.py) validating cross-tenant RLS blocking, `AES-256-GCM` KMS envelope encryption, dynamic `Composite_Score` weighting, `[[Wikilink]]` edge sync, inbound newsletter clustering, Subgraph Co-Pilot RAG, `python-pptx` deck generation, and public F500/SEC/NIST collectors.
+4. **Gate 4 — UI Component DOM Test-ID & Next.js 15 TypeScript Strict Gate**: Verifies all 9 interactive UI component DOM anchors and executes `tsc --noEmit` in `apps/web` to ensure zero type regressions across the 3-Pane UI and Boardroom Mode.
+5. **Gate 5 — 14-Stage End-to-End Functional, Local LLM & Zero-Trust MCP Suite**: Runs [`verify_vectra_stack.py`](./packages/db/verify_vectra_stack.py) validating cross-tenant RLS blocking, `AES-256-GCM` KMS envelope encryption, dynamic `Composite_Score` weighting, `[[Wikilink]]` edge sync, inbound newsletter clustering, Subgraph Co-Pilot RAG, `python-pptx` deck generation, F500/SEC/NIST collectors, Sovereign Local LLM (`ollama` default + zero-commercial guardrail), and Zero-Trust MCP Gateway mediation.
 
 ---
 

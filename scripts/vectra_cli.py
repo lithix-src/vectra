@@ -76,8 +76,28 @@ def _run(cmd: list[str], cwd: Path = ROOT_DIR) -> int:
     return proc.returncode
 
 
+def _install_local_pre_commit_hook() -> None:
+    """Install a cross-platform .git/hooks/pre-commit hook to run 5-gate review locally before commits."""
+    hooks_dir = ROOT_DIR / ".git" / "hooks"
+    if not hooks_dir.exists():
+        return
+    hook_file = hooks_dir / "pre-commit"
+    hook_script = (
+        "#!/usr/bin/env sh\n"
+        "# VECTRA Local Pre-Commit Gate (Zero GitHub Actions — Local Verification Only)\n"
+        "echo \"[vectra pre-commit] Running local 5-Gate Review & 14-Stage Verification before commit...\"\n"
+        "uv run python scripts/vectra_cli.py review\n"
+    )
+    hook_file.write_text(hook_script, encoding="utf-8")
+    try:
+        hook_file.chmod(0o755)
+    except OSError:
+        pass
+
+
 def cmd_setup() -> int:
-    """Ensure latest standard CPython is installed via uv, create .venv, and install editable packages."""
+    """Ensure latest standard CPython is installed via uv, create .venv, install editable packages, and wire git pre-commit hook."""
+    _install_local_pre_commit_hook()
     _run(["uv", "python", "install"])
     _run(["uv", "python", "upgrade"])
 
