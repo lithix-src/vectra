@@ -117,6 +117,12 @@ ALTER TABLE node_sources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE associative_edges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE consultant_notes ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE user_integrations FORCE ROW LEVEL SECURITY;
+ALTER TABLE canonical_nodes FORCE ROW LEVEL SECURITY;
+ALTER TABLE node_sources FORCE ROW LEVEL SECURITY;
+ALTER TABLE associative_edges FORCE ROW LEVEL SECURITY;
+ALTER TABLE consultant_notes FORCE ROW LEVEL SECURITY;
+
 -- user_integrations: strict owner_user_id isolation
 CREATE POLICY rls_user_integrations_isolation ON user_integrations
     USING (owner_user_id = current_setting('app.current_user_id', true))

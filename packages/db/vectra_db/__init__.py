@@ -22,6 +22,7 @@ from .session import (
     rls_visibility_filter,
     tenant_session,
 )
+from .security import derive_tenant_kek_hkdf
 from .vault import EncryptedEnvelope, KMSEnvelopeVault
 
 __all__ = [
@@ -45,4 +46,5 @@ __all__ = [
     "tenant_session",
     "EncryptedEnvelope",
     "KMSEnvelopeVault",
+    "derive_tenant_kek_hkdf",
 ]

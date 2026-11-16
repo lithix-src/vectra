@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: apache/age:release_PG17_1.5.0
+    container_name: vectra-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vectra
+      POSTGRES_PASSWORD: vectra_secure_password
+      POSTGRES_DB: vectra_intel
+    ports:
+      - "5432:5432"
+    volumes:
+      - vectra_pgdata:/var/lib/postgresql/data
+      - ../../packages/db/sql/init_extensions_and_rls.sql:/docker-entrypoint-initdb.d/01_init_extensions_and_rls.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vectra -d vectra_intel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: vectra-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - vectra_redisdata:/data
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    container_name: vectra-temporal
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=vectra
+      - POSTGRES_PWD=vectra_secure_password
+      - POSTGRES_SEEDS=postgres
+    ports:
+      - "7233:7233"
+
+  temporal-ui:
+    image: temporalio/ui:2.32.0
+    container_name: vectra-temporal-ui
+    restart: unless-stopped
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    ports:
+      - "8080:8080"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: vectra-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - vectra_ollamadata:/root/.ollama
+
+  litellm-local:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: vectra-litellm-local
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    volumes:
+      - ../../litellm_config.yaml:/app/config.yaml:ro
+    ports:
+      - "4000:4000"
+
+volumes:
+  vectra_pgdata:
+  vectra_redisdata:
+  vectra_ollamadata:

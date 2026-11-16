@@ -33,9 +33,11 @@ MCPTransportType = Literal["mcp_http_sse", "mcp_internal_broker", "stdio_unproxi
 
 FORBIDDEN_MCP_TARGETS = {
     "user_integrations",
+    "tenant_integrations",
     "encrypted_dek",
     "ciphertext",
     "auth_tag",
+    "kms_key_id",
     "kms_master_key",
     "vectra_kms_master_key",
     "raw_sql",
@@ -44,12 +46,16 @@ FORBIDDEN_MCP_TARGETS = {
 }
 
 SECRET_REDACTION_REGEX = re.compile(
-    r"(x_pkce_at_[a-zA-Z0-9_]+|sk-[a-zA-Z0-9]{16,}|ghp_[a-zA-Z0-9]{16,}|Bearer\s+[a-zA-Z0-9_\-\.]+)",
+    r"(x_pkce_at_[a-zA-Z0-9_]+|sk-[a-zA-Z0-9]{16,}|ghp_[a-zA-Z0-9]{16,}|Bearer\s+[a-zA-Z0-9_\-\.]+|AES256GCM:[a-zA-Z0-9+/=_\-\.:]+)",
     re.IGNORECASE,
 )
 
 
-class MCPPolicyViolationError(PermissionError):
+class MCPGatewaySecurityError(PermissionError):
+    """Raised when an MCP request or unmediated LLM call violates Zero-Trust MCP Gateway security policy."""
+
+
+class MCPPolicyViolationError(MCPGatewaySecurityError):
     """Raised when an MCP request or unmediated LLM call violates Zero-Trust MCP Gateway policy."""
 
 
@@ -167,18 +173,22 @@ DEFAULT_MCP_SERVERS: Dict[str, MCPServerDefinition] = {
         endpoint_url="mcp://vectra-notes-mcp/v1",
         enabled=True,
         allowed_scopes=["notes:read"],
-        allowed_tools=["vectra_get_consultant_notes"],
+        allowed_tools=["vectra_get_consultant_notes", "vectra_preview_wikilink_edges"],
         description="Tenant-isolated access to consultant Markdown field notes and extracted [[Wikilink]] edges.",
     ),
     "vectra-embeddings-mcp": MCPServerDefinition(
         server_id="vectra-embeddings-mcp",
-        name="VECTRA Local 1536-d Vector Embeddings MCP Server",
+        name="VECTRA Local 1536-d Vector Embeddings & Deliverables MCP Server",
         transport="mcp_internal_broker",
         endpoint_url="mcp://vectra-embeddings-mcp/v1",
         enabled=True,
-        allowed_scopes=["embeddings:compute"],
-        allowed_tools=["vectra_compute_local_embedding"],
-        description="Sovereign local embedding computation (Ollama / LiteLLM / vLLM) projected to 1536-d.",
+        allowed_scopes=["embeddings:compute", "graph:read"],
+        allowed_tools=[
+            "vectra_compute_local_embedding",
+            "vectra_list_curated_packs",
+            "vectra_prepare_deliverable_manifest",
+        ],
+        description="Sovereign local embedding computation (1536-d), curated packs, and deliverable manifests.",
     ),
 }
 
@@ -224,6 +234,19 @@ MCP_TOOLS_CATALOG: List[Dict[str, Any]] = [
         },
     },
     {
+        "name": "vectra_preview_wikilink_edges",
+        "server_id": "vectra-notes-mcp",
+        "required_scope": "notes:read",
+        "description": "Extract and preview Obsidian [[Wikilink]] associative edges from consultant Markdown notes.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "markdown_content": {"type": "string", "default": ""},
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "vectra_inspect_cypher",
         "server_id": "vectra-graph-mcp",
         "required_scope": "cypher:read",
@@ -247,6 +270,31 @@ MCP_TOOLS_CATALOG: List[Dict[str, Any]] = [
                 "text": {"type": "string"},
             },
             "required": ["text"],
+        },
+    },
+    {
+        "name": "vectra_list_curated_packs",
+        "server_id": "vectra-embeddings-mcp",
+        "required_scope": "graph:read",
+        "description": "List curated Public Enterprise Intelligence collector packs (Fortune 500 CapEx, SEC 8-K, NIST AI RMF).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "vectra_prepare_deliverable_manifest",
+        "server_id": "vectra-embeddings-mcp",
+        "required_scope": "graph:read",
+        "description": "Prepare a deliverable manifest for Executive .pptx and .md Advisory Brief generation.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "node_ids": {"type": "array", "items": {"type": "string"}},
+                "variant_lens": {"type": "string", "default": "c_suite"},
+            },
+            "required": [],
         },
     },
 ]
@@ -571,6 +619,22 @@ class MCPZeroTrustGateway:
                 "citations": citations_res.get("citations", []),
                 "notes": notes_res.get("notes", []),
             },
+        )
+
+    async def create_rag_envelope(
+        self,
+        *,
+        node_ids: List[str],
+        vertical: str = "All Verticals",
+        tenant_user_id: str = "erik",
+        tenant_org_id: str = "vectra-advisory",
+    ) -> MCPMediatedEnvelope:
+        """Alias for `build_rag_mcp_envelope` matching local handoff specification."""
+        return await self.build_rag_mcp_envelope(
+            node_ids=node_ids,
+            vertical=vertical,
+            tenant_user_id=tenant_user_id,
+            tenant_org_id=tenant_org_id,
         )
 
     async def handle_jsonrpc(

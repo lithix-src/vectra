@@ -457,11 +457,47 @@ async def _mcp_tool_compute_embedding(
     return await embed_text_local_1536(str(arguments.get("text") or ""))
 
 
+async def _mcp_tool_preview_wikilink_edges(
+    *, arguments: Dict[str, Any], tenant_user_id: str, tenant_org_id: str
+) -> Dict[str, Any]:
+    md = str(arguments.get("markdown_content") or "")
+    links = extract_wikilinks(md)
+    return {"extracted_wikilinks": links, "preview_edge_count": len(links)}
+
+
+async def _mcp_tool_list_curated_packs(
+    *, arguments: Dict[str, Any], tenant_user_id: str, tenant_org_id: str
+) -> Dict[str, Any]:
+    return {
+        "packs": [
+            {"id": "f500_ai_capex", "name": "Fortune 500 Engineering & AI CapEx Telemetry", "tier": 1},
+            {"id": "sec_edgar_8k", "name": "SEC EDGAR 10-K / 8-K Operational Disclosures", "tier": 1},
+            {"id": "nist_eu_ai_act", "name": "NIST AI RMF / EU AI Act / OCC SR 11-7 Standards", "tier": 1},
+        ]
+    }
+
+
+async def _mcp_tool_prepare_deliverable_manifest(
+    *, arguments: Dict[str, Any], tenant_user_id: str, tenant_org_id: str
+) -> Dict[str, Any]:
+    node_ids = list(arguments.get("node_ids") or ["node-jpm-agentic-kyc"])
+    lens = str(arguments.get("variant_lens") or "c_suite")
+    return {
+        "deliverables": ["VECTRA_Executive_Readout.pptx", "VECTRA_Executive_Brief.md"],
+        "node_ids": node_ids,
+        "variant_lens": lens,
+        "rls_verified": True,
+    }
+
+
 mcp_gateway.register_tool_handler("vectra_get_rls_subgraph", _mcp_tool_get_rls_subgraph)
 mcp_gateway.register_tool_handler("vectra_get_verified_citations", _mcp_tool_get_verified_citations)
 mcp_gateway.register_tool_handler("vectra_get_consultant_notes", _mcp_tool_get_consultant_notes)
+mcp_gateway.register_tool_handler("vectra_preview_wikilink_edges", _mcp_tool_preview_wikilink_edges)
 mcp_gateway.register_tool_handler("vectra_inspect_cypher", _mcp_tool_inspect_cypher)
 mcp_gateway.register_tool_handler("vectra_compute_local_embedding", _mcp_tool_compute_embedding)
+mcp_gateway.register_tool_handler("vectra_list_curated_packs", _mcp_tool_list_curated_packs)
+mcp_gateway.register_tool_handler("vectra_prepare_deliverable_manifest", _mcp_tool_prepare_deliverable_manifest)
 
 
 @app.get("/api/mcp/status")

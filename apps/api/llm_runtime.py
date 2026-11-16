@@ -125,8 +125,12 @@ FORBIDDEN_COMMERCIAL_MODEL_PREFIXES = (
 )
 
 
-class CommercialModelPolicyError(ValueError):
+class SovereignPolicyViolationError(ValueError):
     """Raised when a commercial cloud LLM endpoint or model is configured under VECTRA's sovereign policy."""
+
+
+class CommercialModelPolicyError(SovereignPolicyViolationError):
+    """Alias/subclass raised when a commercial cloud LLM endpoint or model is configured."""
 
 
 class LocalLLMConfig(BaseModel):
