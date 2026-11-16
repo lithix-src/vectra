@@ -55,6 +55,28 @@ services:
     ports:
       - "8080:8080"
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: vectra-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - vectra_ollamadata:/root/.ollama
+
+  litellm-local:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: vectra-litellm-local
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+    ports:
+      - "4000:4000"
+
 volumes:
   vectra_pgdata:
   vectra_redisdata:
+  vectra_ollamadata:

@@ -165,6 +165,44 @@ async def run_verification() -> None:
     assert ("[Subscriber Licensed]" in brief_md) or ("[Public]" in brief_md)
     print(f"[PASS] 10. Markdown Executive Brief exported ({len(brief_md)} chars) with provenance badges verified.")
 
+    # 11. Verify Sovereign Local LLM & Embeddings Runtime (Ollama default + LiteLLM / vLLM / llama.cpp)
+    from fastapi import HTTPException
+    from llm_runtime import LocalLLMConfig
+    from main import (
+        LocalEmbedRequest,
+        create_local_embedding,
+        get_local_llm_runtime_status,
+        update_local_llm_runtime_config,
+    )
+
+    llm_status = await get_local_llm_runtime_status()
+    assert llm_status["provider"] == "ollama"
+    assert llm_status["commercial_models_blocked"] is True
+    embed_res = await create_local_embedding(
+        LocalEmbedRequest(text="Disaggregated vLLM serving with Ollama and PostgreSQL 17 pgvector RLS")
+    )
+    assert len(embed_res["embedding"]) == 1536
+    print(
+        f"[PASS] 11. Sovereign Local LLM & 1536-d Embedding Engine verified "
+        f"(default={llm_status['provider']}:{llm_status['model']}, dim={len(embed_res['embedding'])})."
+    )
+
+    # 12. Verify Strict Zero-Commercial Cloud LLM Guardrail (Blocks OpenAI / Anthropic / Gemini)
+    commercial_blocked = False
+    try:
+        await update_local_llm_runtime_config(
+            LocalLLMConfig(
+                provider="vllm",
+                base_url="https://api.openai.com/v1",
+                model="gpt-4o",
+                embedding_model="text-embedding-3-small",
+            )
+        )
+    except HTTPException as exc:
+        commercial_blocked = exc.status_code == 400
+    assert commercial_blocked, "Sovereign policy failed to block commercial cloud LLM endpoint!"
+    print("[PASS] 12. Sovereign Zero-Commercial LLM Guardrail verified (blocked api.openai.com / gpt-4o).")
+
 
 if __name__ == "__main__":
     asyncio.run(run_verification())

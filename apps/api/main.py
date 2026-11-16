@@ -35,6 +35,16 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT_DIR / "packages" / "db"))
 sys.path.insert(0, str(ROOT_DIR / "apps" / "workers"))
 
+from llm_runtime import (  # noqa: E402
+    CommercialModelPolicyError,
+    CopilotLLMGeneration,
+    LocalLLMConfig,
+    embed_text_local_1536,
+    generate_local_rag_synthesis,
+    get_active_llm_config,
+    probe_local_llm_status,
+    set_active_llm_config,
+)
 from pptx_generator import build_subgraph_pptx  # noqa: E402
 from vectra_db import (  # noqa: E402
     AssociativeEdge,
@@ -144,6 +154,15 @@ class CopilotStructuredResponse(BaseModel):
     citations_used: List[CopilotCitationRef]
     subgraph_node_count: int
     subgraph_edge_count: int
+    llm_provider: str = "ollama"
+    llm_model: str = "qwen2.5:14b-instruct"
+    execution_mode: Literal["local_llm", "deterministic_local_fallback"] = "deterministic_local_fallback"
+    commercial_models_blocked: bool = True
+    latency_ms: float = 0.0
+
+
+class LocalEmbedRequest(BaseModel):
+    text: str
 
 
 class CopilotQueryRequest(BaseModel):
@@ -315,13 +334,43 @@ async def _build_rls_graph_payload(
 
 @app.get("/api/health")
 async def health_check() -> Dict[str, Any]:
+    llm_cfg = get_active_llm_config()
     return {
         "status": "ok",
         "service": "vectra-api",
         "rls_enforced": True,
         "kms_cipher": "AES-256-GCM",
         "default_tenant": "erik@vectra-advisory",
+        "llm_provider": llm_cfg.provider,
+        "llm_model": llm_cfg.model,
+        "embedding_model": llm_cfg.embedding_model,
+        "commercial_models_blocked": llm_cfg.block_commercial_models,
     }
+
+
+@app.get("/api/llm/status")
+async def get_local_llm_runtime_status() -> Dict[str, Any]:
+    """Probe the active Sovereign Local LLM & Embedding runtime (Ollama default, LiteLLM, vLLM, llama.cpp, LM Studio)."""
+    return await probe_local_llm_status()
+
+
+@app.post("/api/llm/config")
+async def update_local_llm_runtime_config(req: LocalLLMConfig) -> Dict[str, Any]:
+    """Update active local LLM provider, base URL, chat model, or embedding model.
+
+    Strictly rejects any commercial cloud LLM host or model under VECTRA's Sovereign Local LLM Policy.
+    """
+    try:
+        updated = set_active_llm_config(req)
+    except CommercialModelPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await probe_local_llm_status(updated)
+
+
+@app.post("/api/llm/embed")
+async def create_local_embedding(req: LocalEmbedRequest) -> Dict[str, Any]:
+    """Compute a 1536-d vector embedding using the configured local embedding model (with deterministic fallback)."""
+    return await embed_text_local_1536(req.text)
 
 
 @app.get("/api/graph")
@@ -827,14 +876,38 @@ async def query_subgraph_copilot(
         "Days 61–90: Deploy disaggregated prefill/decode vLLM serving and deterministic Temporal state machines for production sign-off.",
     ]
 
-    return CopilotStructuredResponse(
+    fallback_gen = CopilotLLMGeneration(
         executive_answer=exec_answer,
         architectural_implications=arch_implications,
         contrarian_risks=contrarian_risks,
         recommended_90_day_actions=actions_90d,
+    )
+
+    rag_result = await generate_local_rag_synthesis(
+        question=req.question,
+        variant_lens=req.variant_lens,
+        lens_label=lens_label,
+        selected_nodes=selected_nodes,
+        selected_edges=selected_edges,
+        citations_summary=[c.model_dump() for c in citations],
+        notes_included=notes_included,
+        fallback_generation=fallback_gen,
+    )
+    gen: CopilotLLMGeneration = rag_result["generation"]
+
+    return CopilotStructuredResponse(
+        executive_answer=gen.executive_answer,
+        architectural_implications=gen.architectural_implications,
+        contrarian_risks=gen.contrarian_risks,
+        recommended_90_day_actions=gen.recommended_90_day_actions,
         citations_used=citations[:8],
         subgraph_node_count=len(selected_nodes),
         subgraph_edge_count=len(selected_edges),
+        llm_provider=rag_result["llm_provider"],
+        llm_model=rag_result["llm_model"],
+        execution_mode=rag_result["execution_mode"],
+        commercial_models_blocked=rag_result["commercial_models_blocked"],
+        latency_ms=rag_result["latency_ms"],
     )
 
 

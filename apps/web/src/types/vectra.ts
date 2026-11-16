@@ -95,6 +95,29 @@ export interface CopilotCitationRef {
   exact_quote: string;
 }
 
+export type LocalLLMProvider =
+  | "ollama"
+  | "litellm_proxy"
+  | "vllm"
+  | "llamacpp"
+  | "lmstudio";
+
+export interface LocalLLMStatus {
+  provider: LocalLLMProvider;
+  provider_label: string;
+  base_url: string;
+  model: string;
+  embedding_model: string;
+  temperature: number;
+  daemon_online: boolean;
+  execution_mode: "local_llm" | "deterministic_local_fallback";
+  commercial_models_blocked: boolean;
+  discovered_models: string[];
+  recommended_models: string[];
+  probe_latency_ms: number;
+  status_detail: string;
+}
+
 export interface CopilotStructuredResponse {
   executive_answer: string;
   architectural_implications: string[];
@@ -103,4 +126,9 @@ export interface CopilotStructuredResponse {
   citations_used: CopilotCitationRef[];
   subgraph_node_count: number;
   subgraph_edge_count: number;
+  llm_provider?: string;
+  llm_model?: string;
+  execution_mode?: "local_llm" | "deterministic_local_fallback";
+  commercial_models_blocked?: boolean;
+  latency_ms?: number;
 }

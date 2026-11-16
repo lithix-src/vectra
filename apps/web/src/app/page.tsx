@@ -38,6 +38,8 @@ import {
   AssociativeEdgeItem,
   CanonicalNodeItem,
   CopilotStructuredResponse,
+  LocalLLMProvider,
+  LocalLLMStatus,
   RelationType,
   UserIntegrationItem,
   VariantLens,
@@ -117,12 +119,136 @@ export default function VectraAdvisoryWorkspace() {
   const [pptxDownloading, setPptxDownloading] = useState<boolean>(false);
   const [briefDownloading, setBriefDownloading] = useState<boolean>(false);
 
+  // Sovereign Local LLM & Embeddings Runtime State (Ollama default, 0% Commercial Cloud)
+  const [llmModalOpen, setLLMModalOpen] = useState<boolean>(false);
+  const [llmStatus, setLLMStatus] = useState<LocalLLMStatus>({
+    provider: "ollama",
+    provider_label: "Ollama (Local Daemon)",
+    base_url: "http://localhost:11434",
+    model: "qwen2.5:14b-instruct",
+    embedding_model: "nomic-embed-text",
+    temperature: 0.15,
+    daemon_online: false,
+    execution_mode: "deterministic_local_fallback",
+    commercial_models_blocked: true,
+    discovered_models: [],
+    recommended_models: [
+      "qwen2.5:14b-instruct",
+      "llama3.3:8b",
+      "deepseek-r1:14b",
+      "mistral-nemo:12b",
+      "phi4:14b",
+    ],
+    probe_latency_ms: 0,
+    status_detail: "Sovereign Local Runtime (Ollama default — Zero Commercial Cloud)",
+  });
+  const [llmProviderInput, setLLMProviderInput] =
+    useState<LocalLLMProvider>("ollama");
+  const [llmBaseUrlInput, setLLMBaseUrlInput] = useState<string>(
+    "http://localhost:11434"
+  );
+  const [llmModelInput, setLLMModelInput] = useState<string>(
+    "qwen2.5:14b-instruct"
+  );
+  const [llmEmbedModelInput, setLLMEmbedModelInput] =
+    useState<string>("nomic-embed-text");
+  const [llmSaving, setLLMSaving] = useState<boolean>(false);
+
   const triggerToast = useCallback((msg: string) => {
     setStatusToast(msg);
     setTimeout(() => {
       setStatusToast((prev) => (prev === msg ? null : prev));
     }, 4500);
   }, []);
+
+  const fetchLocalLLMStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/llm/status`);
+      if (res.ok) {
+        const data: LocalLLMStatus = await res.json();
+        setLLMStatus(data);
+        setLLMProviderInput(data.provider);
+        setLLMBaseUrlInput(data.base_url);
+        setLLMModelInput(data.model);
+        setLLMEmbedModelInput(data.embedding_model);
+      }
+    } catch {
+      // Keep sovereign local defaults if offline
+    }
+  }, []);
+
+  const handleSelectLLMProviderPreset = (prov: LocalLLMProvider) => {
+    setLLMProviderInput(prov);
+    const presets: Record<
+      LocalLLMProvider,
+      { url: string; model: string; embed: string }
+    > = {
+      ollama: {
+        url: "http://localhost:11434",
+        model: "qwen2.5:14b-instruct",
+        embed: "nomic-embed-text",
+      },
+      litellm_proxy: {
+        url: "http://localhost:4000/v1",
+        model: "ollama/qwen2.5:14b-instruct",
+        embed: "ollama/nomic-embed-text",
+      },
+      vllm: {
+        url: "http://localhost:8001/v1",
+        model: "Qwen/Qwen2.5-14B-Instruct",
+        embed: "BAAI/bge-m3",
+      },
+      llamacpp: {
+        url: "http://localhost:8080/v1",
+        model: "qwen2.5-14b-instruct-q4_k_m.gguf",
+        embed: "nomic-embed-text-v1.5.Q8_0.gguf",
+      },
+      lmstudio: {
+        url: "http://localhost:1234/v1",
+        model: "qwen2.5-14b-instruct",
+        embed: "text-embedding-nomic-embed-text-v1.5",
+      },
+    };
+    const p = presets[prov];
+    setLLMBaseUrlInput(p.url);
+    setLLMModelInput(p.model);
+    setLLMEmbedModelInput(p.embed);
+  };
+
+  const handleSaveLocalLLMConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLLMSaving(true);
+    try {
+      const res = await fetch(`/api/llm/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: llmProviderInput,
+          base_url: llmBaseUrlInput,
+          model: llmModelInput,
+          embedding_model: llmEmbedModelInput,
+          temperature: 0.15,
+          timeout_seconds: 8.0,
+          block_commercial_models: true,
+        }),
+      });
+      if (res.ok) {
+        const updated: LocalLLMStatus = await res.json();
+        setLLMStatus(updated);
+        setLLMModalOpen(false);
+        triggerToast(
+          `Configured Local LLM: ${updated.provider.toUpperCase()} (${updated.model}) — Zero Commercial Cloud`
+        );
+      } else {
+        const err = await res.json().catch(() => ({}));
+        triggerToast(
+          err.detail || "Blocked: Commercial cloud models are forbidden by policy."
+        );
+      }
+    } finally {
+      setLLMSaving(false);
+    }
+  };
 
   // Fetch RLS-scoped graph & integrations
   const fetchWorkspaceData = useCallback(
@@ -166,6 +292,7 @@ export default function VectraAdvisoryWorkspace() {
 
   useEffect(() => {
     fetchWorkspaceData("All Verticals", false);
+    fetchLocalLLMStatus();
   }, []);
 
   // Keyboard shortcut for `Cmd+K` / `Ctrl+K`
@@ -628,8 +755,27 @@ export default function VectraAdvisoryWorkspace() {
           </button>
         </div>
 
-        {/* Right Header Actions: + Ingest Signal, Cmd+K, Boardroom Mode, .pptx Export */}
+        {/* Right Header Actions: Local LLM Runtime, + Ingest Signal, Cmd+K, Boardroom Mode, .pptx Export */}
         <div className="flex items-center gap-2">
+          <button
+            id="open-local-llm-modal-btn"
+            type="button"
+            onClick={() => {
+              fetchLocalLLMStatus();
+              setLLMModalOpen(true);
+            }}
+            className="px-2.5 py-1.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-mono flex items-center gap-1.5 transition"
+            title="Configure Sovereign Local LLM & Embeddings Runtime (Ollama default, LiteLLM, vLLM, llama.cpp — 0% Commercial Cloud)"
+          >
+            <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden xl:inline">
+              {llmStatus.provider.toUpperCase()}:
+            </span>
+            <span className="truncate max-w-[130px] font-semibold">
+              {llmStatus.model}
+            </span>
+          </button>
+
           <button
             id="open-ingest-signal-modal-btn"
             type="button"
@@ -1326,6 +1472,39 @@ export default function VectraAdvisoryWorkspace() {
                   </button>
                 </div>
 
+                {/* Sovereign Local LLM Runtime Banner */}
+                <div className="bg-[#090D14] border border-emerald-500/30 rounded px-2.5 py-1.5 flex items-center justify-between gap-2 text-[10px] font-mono">
+                  <div className="flex items-center gap-1.5 truncate text-slate-300">
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 ${
+                        llmStatus.daemon_online
+                          ? "bg-emerald-400"
+                          : "bg-amber-400"
+                      }`}
+                    />
+                    <span className="text-emerald-300 font-semibold uppercase">
+                      {llmStatus.provider}
+                    </span>
+                    <span className="text-slate-500">•</span>
+                    <span className="truncate text-slate-200">
+                      {llmStatus.model}
+                    </span>
+                    <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                      0% Commercial Cloud
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fetchLocalLLMStatus();
+                      setLLMModalOpen(true);
+                    }}
+                    className="text-sky-400 hover:underline shrink-0"
+                  >
+                    Configure
+                  </button>
+                </div>
+
                 {/* Scoped Nodes Pill List */}
                 <div className="bg-[#090D14] border border-slate-800 rounded p-2">
                   <div className="text-[10px] font-mono uppercase text-slate-400 mb-1">
@@ -1906,6 +2085,167 @@ export default function VectraAdvisoryWorkspace() {
           </div>
         </div>
       )}
+
+      {/* =================================================================== */}
+      {/* SOVEREIGN LOCAL LLM & EMBEDDINGS RUNTIME MODAL (`/api/llm/config`)  */}
+      {/* =================================================================== */}
+      {llmModalOpen && (
+        <div
+          id="local-llm-config-modal"
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setLLMModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl bg-[#101722] border border-emerald-500/40 rounded-lg shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 bg-[#0D131F]">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-100">
+                  Sovereign Local LLM & Embeddings Runtime (0% Commercial Cloud)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLLMModalOpen(false)}
+                className="text-slate-400 hover:text-slate-200 p-1 rounded bg-slate-800/80"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleSaveLocalLLMConfig}
+              className="p-4 space-y-3 text-xs"
+            >
+              <div className="bg-[#090D14] border border-emerald-500/30 rounded p-2.5 flex items-center justify-between gap-2 font-mono text-[11px]">
+                <div className="text-slate-300">
+                  <div className="text-emerald-300 font-semibold">
+                    Sovereign Policy: VECTRA_BLOCK_COMMERCIAL_LLMS=true
+                  </div>
+                  <div className="text-slate-400 text-[10px] mt-0.5">
+                    {llmStatus.status_detail}
+                  </div>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold shrink-0 ${
+                    llmStatus.daemon_online
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                  }`}
+                >
+                  {llmStatus.daemon_online ? "Daemon Online" : "Fallback Active"}
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1">
+                  Local Runtime Provider (Select Preset)
+                </label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {(
+                    [
+                      { id: "ollama", label: "Ollama (Default)" },
+                      { id: "litellm_proxy", label: "LiteLLM Local" },
+                      { id: "vllm", label: "vLLM (GPU)" },
+                      { id: "llamacpp", label: "llama.cpp" },
+                      { id: "lmstudio", label: "LM Studio" },
+                    ] as { id: LocalLLMProvider; label: string }[]
+                  ).map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleSelectLLMProviderPreset(p.id)}
+                      className={`py-1.5 px-2 rounded font-mono text-[10px] border transition ${
+                        llmProviderInput === p.id
+                          ? "bg-emerald-500 text-slate-950 font-bold border-emerald-400"
+                          : "bg-[#090D14] text-slate-300 border-slate-700 hover:border-slate-500"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1">
+                    Local Daemon Base URL
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={llmBaseUrlInput}
+                    onChange={(e) => setLLMBaseUrlInput(e.target.value)}
+                    className="w-full bg-[#090D14] border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1">
+                    Local Embedding Model (1536-d Projected)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={llmEmbedModelInput}
+                    onChange={(e) => setLLMEmbedModelInput(e.target.value)}
+                    className="w-full bg-[#090D14] border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1">
+                  Active Local Chat / Subgraph RAG Model
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={llmModelInput}
+                  onChange={(e) => setLLMModelInput(e.target.value)}
+                  className="w-full bg-[#090D14] border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs mb-1.5"
+                />
+                <div className="flex flex-wrap gap-1">
+                  {(llmStatus.discovered_models.length > 0
+                    ? llmStatus.discovered_models
+                    : llmStatus.recommended_models
+                  ).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setLLMModelInput(m)}
+                      className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono text-[10px]"
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setLLMModalOpen(false)}
+                  className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  id="save-local-llm-config-btn"
+                  type="submit"
+                  disabled={llmSaving}
+                  className="px-3.5 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs uppercase"
+                >
+                  {llmSaving ? "Saving..." : "Apply Local Runtime"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

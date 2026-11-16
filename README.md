@@ -38,24 +38,28 @@ All Windows host tooling is standardized on **Scoop** and **Rancher Desktop** (w
 # 1. Remove standalone Scoop docker shims if installed so Rancher Desktop's CLI takes precedence
 scoop uninstall docker docker-compose 2>$null
 
-# 2. Ensure Scoop buckets are enabled & install the core toolchain + Rancher Desktop
+# 2. Ensure Scoop buckets are enabled & install the core toolchain + Ollama + Rancher Desktop
 scoop bucket add main
 scoop bucket add extras
-scoop install main/git main/gh main/uv main/nodejs-lts main/pnpm extras/rancher-desktop
+scoop install main/git main/gh main/uv main/nodejs-lts main/pnpm main/ollama extras/rancher-desktop
 
-# 3. Update all Scoop packages to latest
+# 3. Pull default Sovereign Local LLM & Embedding models via Ollama (Zero Commercial Cloud)
+ollama pull qwen2.5:14b-instruct
+ollama pull nomic-embed-text
+
+# 4. Update all Scoop packages to latest
 scoop update *
 
-# 4. Install and upgrade to the latest standard CPython via uv
+# 5. Install and upgrade to the latest standard CPython via uv
 uv python install
 uv python upgrade
 
-# 5. Verify Scoop shims + Rancher Desktop CLI
-Get-Command git, gh, uv, uvx, node, pnpm, nerdctl, docker -ErrorAction SilentlyContinue | Select-Object Name, Version, Source
+# 6. Verify Scoop shims + Ollama + Rancher Desktop CLI
+Get-Command git, gh, uv, uvx, node, pnpm, ollama, nerdctl, docker -ErrorAction SilentlyContinue | Select-Object Name, Version, Source
 uv python list --only-installed
 ```
 
-> **Note:** Do not install `main/docker` or `main/docker-compose` from Scoop, as **Rancher Desktop** bundles its own `docker` and `nerdctl` CLIs matching its active container engine (`dockerd (moby)` or `containerd`).
+> **Note:** Do not install `main/docker` or `main/docker-compose` from Scoop, as **Rancher Desktop** bundles its own `docker` and `nerdctl` CLIs matching its active container engine (`dockerd (moby)` or `containerd`). VECTRA enforces `VECTRA_BLOCK_COMMERCIAL_LLMS=true` by default—routing Subgraph Co-Pilot RAG and embeddings exclusively through local runtimes (`ollama` default, `litellm_proxy` via [`litellm_config.yaml`](./litellm_config.yaml), `vllm`, `llamacpp`, or `lmstudio`).
 
 ---
 

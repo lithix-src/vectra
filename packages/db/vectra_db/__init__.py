@@ -8,6 +8,7 @@ from .models import (
 )
 from .scoring import (
     CLUSTER_COSINE_THRESHOLD,
+    EMBEDDING_DIM,
     compute_composite_score,
     cosine_similarity,
     deterministic_embedding_1536,
@@ -31,6 +32,7 @@ __all__ = [
     "NodeSource",
     "UserIntegration",
     "CLUSTER_COSINE_THRESHOLD",
+    "EMBEDDING_DIM",
     "compute_composite_score",
     "cosine_similarity",
     "deterministic_embedding_1536",

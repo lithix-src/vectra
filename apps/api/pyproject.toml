@@ -20,5 +20,5 @@ dependencies = [
 vectra-db = { path = "../../packages/db", editable = true }
 
 [tool.setuptools]
-py-modules = ["main", "pptx_generator"]
+py-modules = ["main", "pptx_generator", "llm_runtime"]
 
