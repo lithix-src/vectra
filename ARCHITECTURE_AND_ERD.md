@@ -24,9 +24,19 @@ flowchart TD
         REDIS[("Redis 7 Cache & PubSub")]
     end
 
+    subgraph MCP["/apps/api/mcp_gateway.py — Zero-Trust MCP Gateway & Broker"]
+        MCPG["MCPZeroTrustGateway (JSON-RPC 2.0 /api/mcp/rpc)"]
+        ENV["HMAC-Signed MCPMediatedEnvelope (Zero Direct Model DB Access)"]
+    end
+
+    subgraph LocalLLM["/apps/api/llm_runtime.py — Sovereign Local LLM Runtime (0% Commercial Cloud)"]
+        OLLAMA["Ollama Default (qwen2.5:14b-instruct + nomic-embed-text)"]
+        LITELLM["LiteLLM Local Proxy / vLLM / llama.cpp / LM Studio"]
+    end
+
     subgraph API["/apps/api — FastAPI + Instructor + python-pptx"]
         FAPI["FastAPI Async REST & Webhook Gateway"]
-        RAG["Subgraph Co-Pilot (Lasso RAG + Instructor)"]
+        RAG["Subgraph Co-Pilot (MCP-Mediated RAG)"]
         PPTX["python-pptx Executive Deck Generator"]
     end
 
@@ -34,6 +44,7 @@ flowchart TD
         Left["Left Rail: Industry Switcher, Executive Pulse Heatmap, Variant Lens, Auth Vault"]
         Center["Center Canvas: react-force-graph-2d + @xyflow/react Variant Diff Matrix"]
         Right["Right Rail: Verbatim Citations, TipTap [[Wikilink]] Notes, Subgraph Co-Pilot"]
+        Modals["Header Modals: Zero-Trust MCP Inspector, Sovereign Local LLM Config, + Ingest Signal"]
         Present["/present/[sessionId] Boardroom Dual-Window Mode"]
     end
 
@@ -46,7 +57,12 @@ flowchart TD
     PG --- AGE
     FAPI <--> PG
     FAPI <--> REDIS
-    FAPI --> RAG
+    FAPI --> MCPG
+    MCPG <--> PG
+    MCPG --> ENV
+    ENV --> RAG
+    RAG <--> OLLAMA
+    RAG <--> LITELLM
     FAPI --> PPTX
     Web <--> FAPI
     Center --> Present

@@ -30,8 +30,10 @@
 
 ## 2. 3-Pane Progressive Disclosure Layout
 
-1. **Top Executive Command Header & `+ Ingest Signal` Modal**:
+1. **Top Executive Command Header, Zero-Trust MCP Inspector, Sovereign Local LLM Config & `+ Ingest Signal` Modal**:
    - **Variant Lens Switcher**: Persistent 3-lens toggle (`C-Suite` | `CTO/Architect` | `Contrarian`).
+   - **Zero-Trust MCP Gateway Modal (`#open-mcp-gateway-modal-btn` / `#mcp-gateway-modal`)**: Inspects configured MCP servers (`vectra-graph-mcp`, `vectra-citations-mcp`, `vectra-notes-mcp`, `vectra-embeddings-mcp`), executes live JSON-RPC 2.0 `tools/call` requests against `POST /api/mcp/rpc`, and displays the immutable `ALLOWED` / `DENIED` MCP audit trail.
+   - **Sovereign Local LLM & Embeddings Modal (`#open-local-llm-modal-btn` / `#local-llm-config-modal`)**: Configures the active local inference runtime (`ollama` default, `litellm_proxy`, `vllm`, `llamacpp`, `lmstudio`), discovers local models, and enforces `VECTRA_BLOCK_COMMERCIAL_LLMS=true` (`0% Commercial Cloud`).
    - **`+ Ingest Signal` Modal (`#open-ingest-signal-modal-btn`)**: Allows Erik to submit a custom field intelligence signal (`title`, `exact_quote`, `direct_url`, `source_name`, `provenance_license` (`subscriber_licensed` | `public`), `visibility` (`user_private` | `org_private` | `global`), and `industry_vertical`) to `POST /api/signals/ingest`, clustering into existing 14-day Canonical Nodes (`cosine > 0.84`) or instantiating a new node.
 2. **Left Rail (Snap View & Auth Health)**:
    - **Industry Vertical Switcher**: Filter by *All Verticals*, *Financial Services*, *Healthcare & Life Sciences*, *Manufacturing & Supply Chain*, *Retail/CPG*, *Legal/Professional Services*, or *Cross-Industry Horizontal*.

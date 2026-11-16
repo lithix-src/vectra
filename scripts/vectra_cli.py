@@ -295,8 +295,46 @@ def cmd_worker() -> int:
     return _run([py, "worker.py"], cwd=ROOT_DIR / "apps" / "workers")
 
 
+def cmd_dev() -> int:
+    """Ensure resources (.env, .venv, node_modules) are configured and run FastAPI (:8000) + Next.js (:3000) concurrently."""
+    env_file = ROOT_DIR / ".env"
+    env_example = ROOT_DIR / ".env.example"
+    if not env_file.exists() and env_example.exists():
+        shutil.copyfile(env_example, env_file)
+        print("[vectra-cli] Created .env from .env.example")
+
+    rc = _ensure_venv()
+    if rc != 0:
+        return rc
+
+    if not (ROOT_DIR / "node_modules").exists():
+        rc = _run([_pnpm_bin(), "install", "--ignore-scripts"], cwd=ROOT_DIR)
+        if rc != 0:
+            return rc
+
+    py = _venv_python()
+    pnpm = _pnpm_bin()
+    print("[vectra-cli] Starting FastAPI (:8000) and Next.js 15 Advisory OS (:3000)...")
+    api_proc = subprocess.Popen(
+        [py, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"],
+        cwd=str(ROOT_DIR / "apps" / "api"),
+    )
+    web_proc = subprocess.Popen(
+        [pnpm, "--filter", "@vectra/web", "dev"],
+        cwd=str(ROOT_DIR),
+    )
+    try:
+        return web_proc.wait()
+    except KeyboardInterrupt:
+        print("\n[vectra-cli] Stopping local dev services...")
+        return 0
+    finally:
+        api_proc.terminate()
+        web_proc.terminate()
+
+
 def cmd_infra_up() -> int:
-    """Start Postgres 17 (pgvector + AGE), Redis, and Temporal via Rancher Desktop."""
+    """Start Postgres 17 (pgvector + AGE), Redis, Temporal, Ollama & LiteLLM via Rancher Desktop."""
     return _run([*_compose_cmd(), "-f", "docker-compose.yml", "up", "-d"], cwd=ROOT_DIR)
 
 
@@ -345,6 +383,7 @@ def main() -> int:
         "review": cmd_review,
         "verify": cmd_verify,
         "instantiate": cmd_instantiate,
+        "dev": cmd_dev,
         "api": cmd_api,
         "worker": cmd_worker,
         "infra-up": cmd_infra_up,
@@ -355,7 +394,7 @@ def main() -> int:
     if action not in dispatch:
         print(
             "Usage: uv run python scripts/vectra_cli.py "
-            "[setup|clean|review|verify|instantiate|api|worker|infra-up|infra-down|deploy-up|deploy-down]"
+            "[setup|clean|review|verify|instantiate|dev|api|worker|infra-up|infra-down|deploy-up|deploy-down]"
         )
         return 0
     return dispatch[action]()

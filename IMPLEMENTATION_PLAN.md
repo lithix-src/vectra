@@ -1,10 +1,12 @@
 # IMPLEMENTATION_PLAN & STATE — VECTRA: Enterprise AI Intelligence & Advisory OS
 
 > [!IMPORTANT]
-> **Current Project State**: **PHASES 1–5 COMPLETE (`10/10` E2E Checks & `5/5` Review Gates Verified on `CPython 3.15.2`) — LIVE MVP RUNNING**
+> **Current Project State**: **PHASES 1–6 COMPLETE (`14/14` E2E Checks & `5/5` Review Gates Verified on `CPython 3.15.2`) — LIVE MVP RUNNING**
 > **Toolchain & Management Standard**:
-> - **Canonical Windows Target Directory**: **`D:\projects\vectra`** (Cloud VM staging mirror: `/home/antigravity/projects/vectra`).
-> - **Windows Host**: **Scoop** (`main/git`, `main/gh`, `main/uv`, `main/nodejs-lts`, `main/pnpm`, `extras/rancher-desktop`).
+> - **Canonical Windows Target Directory**: **`D:\projects\vectra`** (Cloud VM staging mirror: `/home/antigravity/lithix-src/vectra`).
+> - **Windows Host**: **Scoop** (`main/git`, `main/gh`, `main/uv`, `main/nodejs-lts`, `main/pnpm`, `main/ollama`, `extras/rancher-desktop`).
+> - **Sovereign Local LLM & Embeddings Runtime**: **`ollama` default** (`qwen2.5:14b-instruct` + `nomic-embed-text`), plus `litellm_proxy` ([`litellm_config.yaml`](./litellm_config.yaml)), `vllm`, `llamacpp`, and `lmstudio`. Strict **`VECTRA_BLOCK_COMMERCIAL_LLMS=true`** guardrail blocks all commercial cloud APIs.
+> - **Zero-Trust MCP Mediation**: All LLM context and tool access is strictly brokered via [`apps/api/mcp_gateway.py`](./apps/api/mcp_gateway.py) (`MCPZeroTrustGateway`, JSON-RPC 2.0 `/api/mcp/rpc`, HMAC-signed `MCPMediatedEnvelope` — zero direct model access to DB/KMS/services).
 > - **Container Runtime**: **Rancher Desktop** (`nerdctl compose` or `dockerd/moby` via `uv run python scripts/vectra_cli.py infra-up` / `deploy-up`).
 > - **Python Management**: **`uv` & `uvx`** tracking the **latest standard CPython release** (`CPython 3.15.2+`). Zero `Makefile` dependencies.
 > - **Documentation Standard**: Every package maintains a thorough `README.md` with a complete **Table of Contents (ToC)**.
