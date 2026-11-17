@@ -1,53 +1,28 @@
 # IMPLEMENTATION_PLAN & STATE — VECTRA: Enterprise AI Intelligence & Advisory OS
 
 > [!IMPORTANT]
-> **Current Project State**: **PHASES 1–6 COMPLETE (`14/14` E2E Checks & `5/5` Review Gates Verified on `CPython 3.15.2`) — LIVE MVP RUNNING**
-> **Toolchain & Management Standard**:
-> - **Canonical Windows Target Directory**: **`D:\projects\vectra`** (Cloud VM staging mirror: `/home/antigravity/lithix-src/vectra`).
-> - **Windows Host**: **Scoop** (`main/git`, `main/gh`, `main/uv`, `main/nodejs-lts`, `main/pnpm`, `main/ollama`, `extras/rancher-desktop`).
-> - **Sovereign Local LLM & Embeddings Runtime**: **`ollama` default** (`qwen2.5:14b-instruct` + `nomic-embed-text`), plus `litellm_proxy` ([`litellm_config.yaml`](./litellm_config.yaml)), `vllm`, `llamacpp`, and `lmstudio`. Strict **`VECTRA_BLOCK_COMMERCIAL_LLMS=true`** guardrail blocks all commercial cloud APIs.
-> - **Zero-Trust MCP Mediation**: All LLM context and tool access is strictly brokered via [`apps/api/mcp_gateway.py`](./apps/api/mcp_gateway.py) (`MCPZeroTrustGateway`, JSON-RPC 2.0 `/api/mcp/rpc`, HMAC-signed `MCPMediatedEnvelope` — zero direct model access to DB/KMS/services).
-> - **Container Runtime**: **Rancher Desktop** (`nerdctl compose` or `dockerd/moby` via `uv run python scripts/vectra_cli.py infra-up` / `deploy-up`).
-> - **Python Management**: **`uv` & `uvx`** tracking the **latest standard CPython release** (`CPython 3.15.2+`). Zero `Makefile` dependencies.
-> - **Documentation Standard**: Every package maintains a thorough `README.md` with a complete **Table of Contents (ToC)**.
+> **Current Project State**: **PHASES 1–7 COMPLETE (`14/14` E2E Checks & `6/6` Review Gates Verified) — MODULAR ARCHITECTURE ENFORCED**
+> - **Mandatory Modularity & Dev Standard ([`AGENTS.md`](./AGENTS.md))**: Every authored file across Python, TypeScript/React, SQL, YAML, and Markdown is strictly capped at **`<= 350 + 20%` (`420` lines)** (currently every authored file is **<= 400 lines**), enforced by **Gate 2** of [`scripts/review_gates.py`](./scripts/review_gates.py).
+> - **Sovereign Local LLM & Embeddings**: [`apps/api/llm_policy.py`](./apps/api/llm_policy.py) & [`apps/api/llm_runtime.py`](./apps/api/llm_runtime.py) (`ollama` default, `VECTRA_BLOCK_COMMERCIAL_LLMS=true`).
+> - **Zero-Trust MCP Mediation**: [`apps/api/mcp_catalog.py`](./apps/api/mcp_catalog.py), [`apps/api/mcp_jsonrpc.py`](./apps/api/mcp_jsonrpc.py), [`apps/api/mcp_gateway.py`](./apps/api/mcp_gateway.py) & [`apps/api/mcp_tools.py`](./apps/api/mcp_tools.py) (4 servers, 9 RLS-scoped tools, HMAC-signed `MCPMediatedEnvelope`).
+> - **Documentation Sync**: Linked package `README.md`s with `## Table of Contents` enforced by **Gate 1**.
 
 ---
 
-## Phase 5: v1.1 Enterprise Delivery Workstreams (Completed & Verified `10/10`)
+## Completed Delivery Milestones
 
-```mermaid
-flowchart TD
-    Plan["Phase 5 Execution Plan"]
-    subgraph Team1["Team 1: Backend, Ingestion & Executive Readout API (/apps/api & /packages/db)"]
-        IngestAPI["POST /api/signals/ingest (Custom Signal & Primary Citation Clustering)"]
-        BriefAPI["POST /api/export/brief (Executive Advisory Memorandum .md Generator)"]
-        Verify10["verify_vectra_stack.py (Expand E2E Suite from 8/8 to 10/10 Checks)"]
-    end
+| Phase | Scope | Key Modules & References | Status |
+| :--- | :--- | :--- | :--- |
+| **Phase 1–4** | Core Postgres 17 RLS + `pgvector` + AGE, KMS Envelope Vault, Temporal Workers, 3-Pane UI, Boardroom `.pptx` | [`packages/db/README.md`](./packages/db/README.md) • [`apps/workers/README.md`](./apps/workers/README.md) | Verified |
+| **Phase 5** | Custom Signal Ingestion (`/api/signals/ingest`), Markdown Brief Export (`/api/export/brief`), `BroadcastChannel` Boardroom Sync | [`apps/api/routes_ingest_auth.py`](./apps/api/routes_ingest_auth.py) • [`apps/api/routes_copilot_deliverables.py`](./apps/api/routes_copilot_deliverables.py) | Verified |
+| **Phase 6** | Sovereign Local LLM (`ollama` / `litellm_proxy` / `vllm`), Zero-Trust MCP Gateway, RSS/Atom & SEC EDGAR Collector Scheduler | [`apps/api/README.md`](./apps/api/README.md) • [`apps/workers/tasks.py`](./apps/workers/tasks.py) | Verified |
+| **Phase 7** | Code Review Hardening, Interactive Collector Scheduler UI, `350 + 20%` (`420` LOC) Modular Decomposition & 6-Gate Pre-Commit Enforcement | [`AGENTS.md`](./AGENTS.md) • [`scripts/review_gates.py`](./scripts/review_gates.py) • [`apps/web/README.md`](./apps/web/README.md) | Verified |
 
-    subgraph Team2["Team 2: 3-Pane GUI & Real-Time Boardroom Sync (/apps/web)"]
-        IngestModal["Interactive '+ Ingest Signal' Modal & Cypher/Score Math Inspector"]
-        BroadcastSync["BroadcastChannel Real-Time Speaker <-> Boardroom Slide & Lens Sync"]
-        KeyNav["Keyboard Arrow Slide Navigation & One-Click Brief Download"]
-    end
+---
 
-    Gate["5-Gate Team Code Review (vectra_cli.py review) & Live MVP Launch"]
-
-    Plan --> Team1
-    Plan --> Team2
-    Team1 --> Gate
-    Team2 --> Gate
-```
-
-### Workstream 1 — Backend, Custom Signal Ingestion & Executive Memo API (`Team 1`)
-- **File Ownership**: `apps/api/main.py`, `packages/db/verify_vectra_stack.py`, `apps/api/README.md`
-- **Deliverables**:
-  1. `POST /api/signals/ingest`: Allows Erik to submit any live primary URL, verbatim pull-quote, source type, authority tier (`1–3`), provenance (`public` | `subscriber_licensed`), visibility (`global` | `org_private` | `user_private`), and industry verticals—automatically embedding (`1536-d`) and clustering (`cosine > 0.84`) onto active 14-day Canonical Nodes or creating a new Canonical Node.
-  2. `POST /api/export/brief`: Generates a structured, client-ready **Executive Advisory Memorandum (`.md`)** containing C-Suite Thesis, CTO Architecture Spec, Contrarian Risk Register, Verbatim Evidence Table (`[Public]` vs `[Subscriber Licensed]`), and 90-Day Action Plan.
-  3. Expand `packages/db/verify_vectra_stack.py` to **10/10 end-to-end checks**.
-
-### Workstream 2 — 3-Pane GUI Modals & Real-Time Boardroom Synchronization (`Team 2`)
-- **File Ownership**: `apps/web/src/app/page.tsx`, `apps/web/src/app/present/[sessionId]/page.tsx`, `apps/web/README.md`
-- **Deliverables**:
-  1. **Interactive `+ Ingest Signal` Modal**: Form in the main workspace to ingest custom primary evidence or create new Canonical Nodes live on the graph.
-  2. **Apache AGE OpenCypher & Score Math Modal**: Interactive drawer displaying the live `cypher('vectra_knowledge_graph', ...)` query and exact mathematical components (`source_authority_component`, `graph_centrality_component`, `consultant_weight`, `composite_score`).
-  3. **Dual-Window `BroadcastChannel` Sync & Keyboard Navigation in Boardroom Mode**: Synchronizes slide changes and Variant Lens switches in real time between Erik's private Speaker Console (`?role=presenter`) and the main Boardroom Projection window, plus `ArrowLeft` / `ArrowRight` keyboard navigation.
+## Key Code Review Fixes & Hardening Highlights (Phase 7)
+1. **Idempotent Citation Deduplication ([`apps/workers/worker.py`](./apps/workers/worker.py))**: `cluster_and_attach_source_activity()` deduplicates repeated `(node_id, exact_quote, owner_user_id, visibility)` sources so recurring collector runs refresh `published_at` without inflating `Composite_Score`.
+2. **Sanitized 3-Tier RLS OpenCypher Generation ([`apps/api/graph_service.py`](./apps/api/graph_service.py))**: `build_safe_cypher_query()` strips injection metacharacters and emits full `global` / `org_private` / `user_private` predicates.
+3. **Exact Score Breakdown Parity ([`packages/db/vectra_db/scoring.py`](./packages/db/vectra_db/scoring.py) & [`IngestAndCypherModals.tsx`](./apps/web/src/components/modals/IngestAndCypherModals.tsx))**: Exposes `base_signal_component` alongside `source_authority_component` and `graph_centrality_component` so UI math matches backend scoring identically.
+4. **Interactive Collector Scheduler Modal ([`CollectorAndCmdkModals.tsx`](./apps/web/src/components/modals/CollectorAndCmdkModals.tsx))**: Wires `GET /api/collectors/packs` and `POST /api/collectors/schedule` into the 3-Pane workspace header, left rail, and `Cmd+K` palette.
+5. **Local LLM Read-Timeout Resilience ([`apps/api/llm_runtime.py`](./apps/api/llm_runtime.py))**: Uses `httpx.Timeout(60.0, connect=2.0)` so local Ollama structured JSON synthesis completes reliably while offline fallback stays sub-10ms.

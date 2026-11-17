@@ -1,202 +1,121 @@
 # VECTRA — Enterprise AI Intelligence & Advisory OS
 
-**VECTRA** is a full-stack, multi-tenant enterprise AI intelligence and decision-support web application engineered for **Erik**. It bridges deep technical architecture (`p99` latency, KV-cache topology, hybrid GraphRAG) and C-Suite strategy (audited ROI, regulatory exposure, capital allocation).
+**VECTRA** is a full-stack, multi-tenant enterprise AI intelligence and decision-support OS engineered for **Erik**. It bridges deep technical architecture (`p99` latency, KV-cache topology, hybrid GraphRAG) and C-Suite strategy (audited ROI, regulatory exposure, capital allocation) while running **100% Sovereign Local LLMs** behind a **Zero-Trust MCP Gateway**.
 
-All project management and deployment commands are **100% cross-platform** (native Windows PowerShell, macOS, and Linux) using **`uv` / `uvx`**, **`pnpm`**, and **`docker compose`**—with zero dependency on `Makefile` or OS-specific shell scripts.
+> [!IMPORTANT]
+> **Mandatory Engineering & Modularity Standard ([`AGENTS.md`](./AGENTS.md))**: Every authored file in VECTRA targets **<= 350 lines** with an enforced hard ceiling of **`420` lines (`350 + 20%`)** (Gate 2 of [`scripts/review_gates.py`](./scripts/review_gates.py)). Modules connect via explicit Python/TypeScript imports, and documentation stays synchronized via relative Markdown links.
 
 ---
 
 ## Table of Contents
-1. [Sub-Package Documentation Index](#1-sub-package-documentation-index)
-2. [Native Windows Setup & Prerequisites](#2-native-windows-setup--prerequisites)
-3. [Cross-Platform Command Reference (`uv`, `uvx`, `pnpm`, `docker compose`)](#3-cross-platform-command-reference-uv-uvx-pnpm-docker-compose)
-4. [Monorepo Directory Structure](#4-monorepo-directory-structure)
+1. [Documentation & Package Index](#1-documentation--package-index)
+2. [Host Prerequisites (WSL & Windows Scoop + Rancher Desktop)](#2-host-prerequisites-wsl--windows-scoop--rancher-desktop)
+3. [Unified Cross-Platform CLI (`scripts/vectra_cli.py`)](#3-unified-cross-platform-cli-scriptsvectra_clipy)
+4. [Modular Monorepo Structure](#4-modular-monorepo-structure)
 5. [Core Architectural Pillars](#5-core-architectural-pillars)
-6. [End-to-End Verification Workflow](#6-end-to-end-verification-workflow)
+6. [6-Gate Review & 14-Stage End-to-End Verification](#6-6-gate-review--14-stage-end-to-end-verification)
 
 ---
 
-## 1. Sub-Package Documentation Index
+## 1. Documentation & Package Index
 
-Each package in the monorepo contains a dedicated `README.md` with its own Table of Contents for both human architects and AI agents:
-
-| Package / App | Path | Primary Responsibility | Documentation |
+| Package / Spec | Path | Responsibility | Linked Reference |
 | :--- | :--- | :--- | :--- |
-| **`vectra-db`** | [`packages/db`](./packages/db) | PostgreSQL 17 (`pgvector` + `Apache AGE`), Multi-Tenant RLS Policies, `AES-256-GCM` KMS Envelope Vault, Canonical Scoring, Alembic Migrations | [`packages/db/README.md`](./packages/db/README.md) |
-| **`vectra-api`** | [`apps/api`](./apps/api) | FastAPI REST & Webhook Gateway, `instructor` Subgraph Co-Pilot RAG, Bidirectional `[[Wikilink]]` Edge Sync, `python-pptx` Executive Deck Generator | [`apps/api/README.md`](./apps/api/README.md) |
-| **`vectra-workers`** | [`apps/workers`](./apps/workers) | Temporal.io Workflows & Activities, In-Memory KMS Token Decryption, X OAuth 2.0 PKCE Rotation, Public F500/SEC/NIST Collectors, Cosine Clustering (`> 0.84`) | [`apps/workers/README.md`](./apps/workers/README.md) |
-| **`@vectra/web`** | [`apps/web`](./apps/web) | Next.js 15 + React 19 3-Pane Progressive Disclosure UI, `react-force-graph-2d` Canvas, `@xyflow/react` Variant Diff Matrix, `@tiptap/react` `[[Wikilink]]` Editor, Boardroom Mode | [`apps/web/README.md`](./apps/web/README.md) |
-| **Architecture, Plan & Deployment** | [`/`](./) | System ERD, Implementation State, Team Code Review Gates, and Rancher Desktop Deployment Architecture | [`ARCHITECTURE_AND_ERD.md`](./ARCHITECTURE_AND_ERD.md) • [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md) • [`DEPLOYMENT_AND_REVIEW_ARCHITECTURE.md`](./DEPLOYMENT_AND_REVIEW_ARCHITECTURE.md) |
+| **Dev & Agent Rules** | [`AGENTS.md`](./AGENTS.md) | Mandatory `350 + 20%` (`420` LOC) modularity cap, live doc sync, security invariants | [`AGENTS.md`](./AGENTS.md) |
+| **WSL & Local Handoff** | [`HANDOFF.md`](./HANDOFF.md) | WSL / `D:\projects\vectra` workflow, Ollama setup, CLI runbook | [`HANDOFF.md`](./HANDOFF.md) |
+| **`vectra-db`** | [`packages/db`](./packages/db) | Postgres 17 (`pgvector` + `Apache AGE`), `ENABLE`+`FORCE` RLS, `AES-256-GCM` KMS + HKDF, Scoring & Seed | [`packages/db/README.md`](./packages/db/README.md) |
+| **`vectra-api`** | [`apps/api`](./apps/api) | Modular FastAPI routers, Sovereign Local LLM (`llm_runtime.py`), Zero-Trust MCP (`mcp_gateway.py`), `.pptx`/`.md` exports | [`apps/api/README.md`](./apps/api/README.md) |
+| **`vectra-workers`** | [`apps/workers`](./apps/workers) | Temporal.io workflows/activities, KMS worker-only decryption, RSS/Atom & SEC EDGAR collector scheduler | [`apps/workers/README.md`](./apps/workers/README.md) |
+| **`@vectra/web`** | [`apps/web`](./apps/web) | Modular Next.js 15 + React 19 3-Pane Workspace, ForceGraph, XYFlow Matrix, `[[Wikilinks]]`, Boardroom Mode | [`apps/web/README.md`](./apps/web/README.md) |
+| **System Architecture** | [`/`](./) | High-level topology, ERD, 6-Gate review pipeline & container deployment | [`ARCHITECTURE_AND_ERD.md`](./ARCHITECTURE_AND_ERD.md) • [`DEPLOYMENT_AND_REVIEW_ARCHITECTURE.md`](./DEPLOYMENT_AND_REVIEW_ARCHITECTURE.md) • [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md) |
 
 ---
 
-## 2. Native Windows Setup & Prerequisites (Scoop + Rancher Desktop)
+## 2. Host Prerequisites (WSL & Windows Scoop + Rancher Desktop)
 
-All Windows host tooling is standardized on **Scoop** and **Rancher Desktop** (which provides its own container engine and CLI shims under `%USERPROFILE%\.rd\bin`):
-
-```powershell
-# 1. Remove standalone Scoop docker shims if installed so Rancher Desktop's CLI takes precedence
-scoop uninstall docker docker-compose 2>$null
-
-# 2. Ensure Scoop buckets are enabled & install the core toolchain + Ollama + Rancher Desktop
-scoop bucket add main
-scoop bucket add extras
-scoop install main/git main/gh main/uv main/nodejs-lts main/pnpm main/ollama extras/rancher-desktop
-
-# 3. Pull default Sovereign Local LLM & Embedding models via Ollama (Zero Commercial Cloud)
-ollama pull qwen2.5:14b-instruct
-ollama pull nomic-embed-text
-
-# 4. Update all Scoop packages to latest
-scoop update *
-
-# 5. Install and upgrade to the latest standard CPython via uv
-uv python install
-uv python upgrade
-
-# 6. Verify Scoop shims + Ollama + Rancher Desktop CLI
-Get-Command git, gh, uv, uvx, node, pnpm, ollama, nerdctl, docker -ErrorAction SilentlyContinue | Select-Object Name, Version, Source
-uv python list --only-installed
-```
-
-> **Note:** Do not install `main/docker` or `main/docker-compose` from Scoop, as **Rancher Desktop** bundles its own `docker` and `nerdctl` CLIs matching its active container engine (`dockerd (moby)` or `containerd`). VECTRA enforces `VECTRA_BLOCK_COMMERCIAL_LLMS=true` by default—routing Subgraph Co-Pilot RAG and embeddings exclusively through local runtimes (`ollama` default, `litellm_proxy` via [`litellm_config.yaml`](./litellm_config.yaml), `vllm`, `llamacpp`, or `lmstudio`).
+- **Python**: Managed strictly via `uv` and `uvx` (`uv python install`, `uv run python ...`). Never invoke bare `pip`.
+- **Node & Frontend**: Node 22/24 LTS + `pnpm` ([`scripts/vectra_cli.py`](./scripts/vectra_cli.py) automatically falls back to `npx --yes pnpm@10` if Corepack shims are misconfigured).
+- **Sovereign Local LLM**: Local **Ollama** (`http://localhost:11434`, `ollama pull qwen2.5:14b-instruct` and `ollama pull nomic-embed-text`) or local `litellm_proxy` ([`litellm_config.yaml`](./litellm_config.yaml)), `vllm`, `llamacpp`, or `lmstudio`.
+- **Containers**: Rancher Desktop (`nerdctl compose` or `docker compose` via [`docker-compose.yml`](./docker-compose.yml)).
 
 ---
 
-## 3. Cross-Platform Command Reference (`uv`, `uvx`, `pnpm`, Rancher Desktop)
+## 3. Unified Cross-Platform CLI (`scripts/vectra_cli.py`)
 
-All commands below work identically in **Windows PowerShell**, **macOS**, and **Linux**:
+Run from the repository root in WSL, Linux, macOS, or Windows PowerShell:
 
-### 3.1 One-Command Product Instantiation, Code Review & Clean-Up (`D:\projects\vectra`)
-```powershell
-# Ensure target directory exists and navigate to D:\projects\vectra
-New-Item -ItemType Directory -Force -Path D:\projects\vectra | Out-Null
-Set-Location D:\projects\vectra
+```bash
+# Zero-to-Verified Instantiation (.env, .venv, pre-commit hook, node_modules, 6-Gate Review + 14-Stage E2E)
+uv run python scripts/vectra_cli.py instantiate
 
-# Zero-to-Verified Product Instantiation (copies .env, provisions latest CPython .venv, installs deps, runs 5-gate review)
-uv run python scripts/vectra_cli.py instantiate   # or: pnpm instantiate
+# Run 6-Gate Code Review (ToC + AGENTS.md, <=420 LOC budget, FORCE RLS, compileall, DOM IDs + tsc, 14/14 E2E)
+uv run python scripts/vectra_cli.py review
 
-# Run 5-Gate Team Code Review & Audit (ToC READMEs, Postgres 17 RLS DDL, CPython compile, TypeScript tsc, 8-stage E2E suite)
-uv run python scripts/vectra_cli.py review        # or: pnpm review
+# Launch FastAPI (:8000) + Next.js 15 (:3000, auto-selecting next free port if occupied)
+uv run python scripts/vectra_cli.py dev
 
-# Clean transient build caches, bytecode, and scratch files (add --reset-db to also reset local SQLite)
-uv run python scripts/vectra_cli.py clean         # or: pnpm clean
-```
+# Start / stop Rancher Desktop data & local LLM containers
+uv run python scripts/vectra_cli.py infra-up
+uv run python scripts/vectra_cli.py infra-down
 
-### 3.2 Standardized Container Deployment (Rancher Desktop — `nerdctl compose` or `docker compose`)
-```powershell
-# Start Data & Orchestration Infrastructure Only (Postgres 17 + pgvector + AGE, Redis 7, Temporal Server + UI)
-uv run python scripts/vectra_cli.py infra-up      # or: pnpm infra:up
-uv run python scripts/vectra_cli.py infra-down    # or: pnpm infra:down
-
-# Build & Launch Full 7-Container Product Stack (Postgres 17 + Redis + Temporal + API + Worker + Next.js Web)
-uv run python scripts/vectra_cli.py deploy-up     # or: pnpm deploy:up
-uv run python scripts/vectra_cli.py deploy-down   # or: pnpm deploy:down
-```
-
-### 3.2 Python Backend, Database & Workers (`uv` & `uvx`)
-```powershell
-# Initialize cross-platform .venv and install editable packages (packages/db, apps/api, apps/workers)
-uv run python scripts/vectra_cli.py setup
-
-# Run the 8-stage end-to-end verification suite (RLS, KMS Vault, Clustering, Wikilinks, Co-Pilot, .pptx)
-uv run python scripts/vectra_cli.py verify
-
-# Start FastAPI server on http://localhost:8000 (or via uvx uvicorn)
-uv run python scripts/vectra_cli.py api
-
-# Start Temporal.io Worker fleet
-uv run python scripts/vectra_cli.py worker
-
-# Run ad-hoc tools with uvx (zero global pollution)
-uvx ruff check packages/db apps/api apps/workers
-uvx --from alembic alembic -c packages/db/alembic.ini heads
-```
-
-### 3.3 Frontend & Turborepo Orchestration (`pnpm`)
-```powershell
-# Install workspace Node dependencies
-pnpm install
-
-# Start Next.js 15 Advisory UI on http://localhost:3000
-pnpm --filter @vectra/web dev
-
-# Build production bundle
-pnpm --filter @vectra/web build
+# Clean transient caches (add --reset-db to reset local SQLite fallback DB)
+uv run python scripts/vectra_cli.py clean --reset-db
 ```
 
 ---
 
-## 4. Monorepo Directory Structure
+## 4. Modular Monorepo Structure
 
 ```text
 vectra/
+├── AGENTS.md                       # Always-on modularity (350+20% LOC) & dev standards
 ├── apps/
-│   ├── api/                        # FastAPI service, Subgraph Co-Pilot, python-pptx generator
-│   │   ├── main.py
-│   │   ├── pptx_generator.py
-│   │   ├── pyproject.toml
-│   │   └── README.md
-│   ├── web/                        # Next.js 15 App Router (React 19, Tailwind, ForceGraph, XYFlow, TipTap)
-│   │   ├── src/
-│   │   │   ├── app/                # 3-Pane Workspace (page.tsx) & Boardroom Mode (/present/[sessionId])
-│   │   │   ├── components/         # AssociativeGraphCanvas, VariantDiffMatrix, WikilinkNoteEditor
-│   │   │   └── types/              # Shared TypeScript interfaces
-│   │   ├── package.json
-│   │   └── README.md
-│   └── workers/                    # Temporal.io Python workers & multi-tier collectors
-│       ├── worker.py
-│       ├── pyproject.toml
-│       └── README.md
-├── packages/
-│   └── db/                         # SQLAlchemy 2.0 Async, Postgres 17 RLS + AGE DDL, KMS Vault, Seed
-│       ├── alembic/
-│       ├── sql/init_extensions_and_rls.sql
-│       ├── vectra_db/
-│       ├── verify_vectra_stack.py
-│       ├── pyproject.toml
-│       └── README.md
-├── scripts/
-│   └── vectra_cli.py               # Cross-platform Python task runner (replaces Makefile)
-├── docker-compose.yml              # Postgres 17 (pgvector + AGE), Temporal, Redis
-├── package.json
-├── pnpm-workspace.yaml
-├── turbo.json
-├── ARCHITECTURE_AND_ERD.md
-├── IMPLEMENTATION_PLAN.md
-└── README.md
+│   ├── api/                        # Modular FastAPI service (all files <= 350 LOC)
+│   │   ├── main.py                 # App entrypoint, health/LLM/MCP/graph routes & re-exports
+│   │   ├── schemas.py              # Pydantic v2 request/response contracts
+│   │   ├── graph_service.py        # RLS graph builder, safe 3-tier Cypher & [[Wikilink]] sync
+│   │   ├── llm_policy.py           # Sovereign zero-commercial policy & 1536-d projection
+│   │   ├── llm_runtime.py          # Ollama / LiteLLM / vLLM / llama.cpp execution engine
+│   │   ├── mcp_catalog.py          # MCP schemas, tool/resource catalogs, HMAC & scrubbing
+│   │   ├── mcp_jsonrpc.py          # JSON-RPC 2.0 protocol dispatcher
+│   │   ├── mcp_gateway.py          # MCPZeroTrustGateway broker & audit log
+│   │   ├── mcp_tools.py            # 9 RLS-scoped internal MCP tool handlers
+│   │   ├── routes_ingest_auth.py   # KMS vault, X PKCE, webhooks & collector scheduler routes
+│   │   ├── routes_copilot_deliverables.py # Subgraph Co-Pilot, Boardroom & .pptx/.md exports
+│   │   └── pptx_generator.py       # 5-slide widescreen python-pptx deck builder
+│   ├── web/src/                    # Modular Next.js 15 + React 19 UI (all files <= 350 LOC)
+│   │   ├── app/                    # page.tsx workspace & present/[sessionId]/page.tsx
+│   │   ├── components/             # Header, LeftRail, CenterPane, RightRail, Graph, Matrix, Editor
+│   │   ├── components/modals/      # Ingest/Cypher, Runtime/MCP, Collector/CmdK modals
+│   │   ├── hooks/                  # useVectraWorkspace & useVectraRuntimeActions
+│   │   ├── lib/vectraDefaults.ts   # Typed presets & offline-safe defaults
+│   │   └── types/vectra.ts         # Shared TypeScript interfaces
+│   └── workers/                    # worker.py & tasks.py (Temporal + RSS/SEC EDGAR scheduler)
+├── packages/db/                    # SQLAlchemy 2.0 Async, Postgres 17 RLS, KMS Vault & Seed
+│   ├── sql/init_extensions_and_rls.sql
+│   ├── vectra_db/                  # models, session, vault, security, scoring, seed_*.py
+│   └── verify_vectra_stack.py      # 14-stage E2E verification suite
+└── scripts/                        # vectra_cli.py & review_gates.py (6-Gate local review)
 ```
 
 ---
 
 ## 5. Core Architectural Pillars
 
-1. **Multi-Tenant Row-Level Security (RLS) & KMS Envelope Vault**:
-   - Every table enforces tenant isolation (`global`, `org_private`, `user_private`).
-   - User-private sources (`subscriber_licensed` excerpts from *Stratechery*, *The Pragmatic Engineer*, *Latent Space*, *Import AI*, and private X Bookmarks) attach seamlessly to global Canonical Nodes inside Erik's RLS view without leaking to other tenants.
-2. **Real-Time Composite Signal Scoring**:
-   - $\text{Composite\_Score} = (\sum (\text{Source\_Authority} \times \text{Recency\_Decay}) + \text{Graph\_Centrality}) \times \text{Consultant\_Weight}$.
-3. **3-Pane Progressive Disclosure & Boardroom Instantiation**:
-   - Left Rail: Industry Vertical Switcher, Executive Pulse Heatmap, Persistent Variant Lens (`C-Suite` | `CTO` | `Contrarian`), and Auth Vault Drawer.
-   - Center Canvas: `react-force-graph-2d` Associative Graph + `@xyflow/react` Variant Diff Matrix.
-   - Right Rail: Verbatim Citation Inspector, TipTap `[[Wikilink]]` Field Notes, and Subgraph Co-Pilot with one-click `.pptx` generation.
+1. **Multi-Tenant Hybrid Knowledge Graph ([`packages/db/README.md`](./packages/db/README.md))**: PostgreSQL 17 (`pgvector` `1536-d` + Apache AGE) with `ENABLE` + `FORCE ROW LEVEL SECURITY` across all 5 tables, zero-config SQLite fallback, `AES-256-GCM` KMS envelope vault + `HKDF-SHA256`, and real-time Composite Scoring:
+   $$\text{Composite\_Score} = (0.35 \cdot \text{Base\_Signal} + \sum (\text{Authority} \times \text{Recency\_Decay} \times 9.5) + \text{Graph\_Centrality}) \times \text{Consultant\_Weight}$$
+2. **Sovereign Local LLM & Zero-Trust MCP Gateway ([`apps/api/README.md`](./apps/api/README.md))**: `VECTRA_BLOCK_COMMERCIAL_LLMS=true` blocks OpenAI/Anthropic/Gemini/etc., while `MCPZeroTrustGateway` enforces HMAC-signed `MCPMediatedEnvelope` mediation and secret/KMS redaction across 4 internal MCP servers and 9 tools.
+3. **Temporal Ingestion & Collector Scheduler ([`apps/workers/README.md`](./apps/workers/README.md))**: Idempotent 14-day cosine clustering (`> 0.84`) with configurable polling schedules for Fortune 500 AI CapEx, SEC EDGAR 8-K/10-K, and NIST/EU AI Act feeds.
+4. **3-Pane Progressive Disclosure & Boardroom Mode ([`apps/web/README.md`](./apps/web/README.md))**: Dual-mode ForceGraph & Variant Diff Matrix, interactive Collector Scheduler, Local LLM & MCP Inspector modals, and `BroadcastChannel`-synced dual-window Presenter Console.
 
 ---
 
-## 6. End-to-End Verification Workflow
+## 6. 6-Gate Review & 14-Stage End-to-End Verification
 
-Run the automated verification suite anytime via `uv`:
-
-```powershell
-uv run python scripts/vectra_cli.py verify
-```
-
-This validates:
-1. Multi-Tenant Row-Level Security (`RLS`) isolation across `canonical_nodes` and `node_sources`
-2. `AES-256-GCM` Envelope Credential Vault encryption & in-memory worker decryption
-3. Dynamic `Composite_Score` recalculation on Consultant Weight changes (`0.5x–5.0x`)
-4. Obsidian `[[Wikilink]]` parsing and automatic `associative_edges` upsertion
-5. Inbound Newsletter Webhook (`intel+erik@ingest.vectra.ai`) semantic clustering (`cosine > 0.84`)
-6. Subgraph Co-Pilot structured RAG synthesis
-7. `python-pptx` 5-slide widescreen `.pptx` presentation generation
-8. Public Enterprise Collectors (F500 Blogs, SEC 8-K, NIST/EU AI Act) & Apache AGE OpenCypher query generation
+Every local commit automatically runs `uv run python scripts/vectra_cli.py review` (details in [`DEPLOYMENT_AND_REVIEW_ARCHITECTURE.md`](./DEPLOYMENT_AND_REVIEW_ARCHITECTURE.md); GitHub Actions is disabled via `uv run python scripts/vectra_cli.py disable-gh-actions`):
+1. **Gate 1**: All 5 package `README.md` files (with `## Table of Contents`) + root [`AGENTS.md`](./AGENTS.md) + Zero GitHub Actions (`.github/workflows/` forbidden).
+2. **Gate 2**: Authored file line-count budget (`<= 420` lines = `350 + 20%`).
+3. **Gate 3**: PostgreSQL 17 `ENABLE` + `FORCE ROW LEVEL SECURITY` across all 5 core tables.
+4. **Gate 4**: Python syntax & bytecode compilation across all backend/worker/CLI modules.
+5. **Gate 5**: All 15 UI DOM Test-IDs (including Context Expression & Data Association Navigator) across `apps/web/src/**/*.tsx` + strict `tsc --noEmit`.
+6. **Gate 6**: 14-Stage E2E verification ([`packages/db/verify_vectra_stack.py`](./packages/db/verify_vectra_stack.py)).

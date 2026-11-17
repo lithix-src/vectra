@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
@@ -138,10 +139,11 @@ async def cluster_and_attach_source_activity(item: IngestItemPayload) -> Dict[st
             target_node = best_node
             matched_existing = True
         else:
-            # Also check domain keyword overlap if title directly references an existing canonical node
+            # Also check normalized alphanumeric token overlap when title references an existing canonical node
+            item_tokens = {w for w in re.findall(r"[a-z0-9]+", item.title.lower()) if len(w) >= 4}
             for node in active_nodes:
-                overlap = set(item.title.lower().split()) & set(node.title.lower().split())
-                if len([w for w in overlap if len(w) > 4]) >= 2:
+                node_tokens = {w for w in re.findall(r"[a-z0-9]+", node.title.lower()) if len(w) >= 4}
+                if len(item_tokens & node_tokens) >= 2:
                     target_node = node
                     best_sim = max(best_sim, 0.87)
                     matched_existing = True
@@ -171,21 +173,33 @@ async def cluster_and_attach_source_activity(item: IngestItemPayload) -> Dict[st
                 session.add(target_node)
                 await session.flush()
 
-        new_source = NodeSource(
-            node_id=target_node.id,
-            source_type=item.source_type,
-            source_name=item.source_name,
-            author_handle=item.author_handle,
-            authority_tier=item.authority_tier,
-            direct_url=item.direct_url,
-            exact_quote=item.exact_quote,
-            provenance_license=item.provenance_license,
-            visibility=item.visibility,
-            owner_org_id=item.owner_org_id,
-            owner_user_id=item.owner_user_id,
-            published_at=now,
+        existing_src_stmt = select(NodeSource).where(
+            NodeSource.node_id == target_node.id,
+            NodeSource.exact_quote == item.exact_quote,
+            NodeSource.owner_user_id == item.owner_user_id,
+            NodeSource.visibility == item.visibility,
         )
-        session.add(new_source)
+        existing_src = (await session.execute(existing_src_stmt)).scalars().first()
+        if existing_src is not None:
+            existing_src.published_at = now
+            existing_src.direct_url = item.direct_url
+            source_obj = existing_src
+        else:
+            source_obj = NodeSource(
+                node_id=target_node.id,
+                source_type=item.source_type,
+                source_name=item.source_name,
+                author_handle=item.author_handle,
+                authority_tier=item.authority_tier,
+                direct_url=item.direct_url,
+                exact_quote=item.exact_quote,
+                provenance_license=item.provenance_license,
+                visibility=item.visibility,
+                owner_org_id=item.owner_org_id,
+                owner_user_id=item.owner_user_id,
+                published_at=now,
+            )
+            session.add(source_obj)
         await session.commit()
 
         return {
@@ -193,9 +207,9 @@ async def cluster_and_attach_source_activity(item: IngestItemPayload) -> Dict[st
             "cosine_similarity": round(best_sim, 4),
             "node_id": target_node.id,
             "node_title": target_node.title,
-            "source_id": new_source.id,
-            "provenance_license": new_source.provenance_license,
-            "visibility": new_source.visibility,
+            "source_id": source_obj.id,
+            "provenance_license": source_obj.provenance_license,
+            "visibility": source_obj.visibility,
         }
 
 
@@ -275,8 +289,20 @@ async def collect_public_enterprise_feeds_activity(
 class MultiTierIngestionWorkflow:
     @workflow.run
     async def run(self, owner_user_id: str = "erik") -> Dict[str, Any]:
-        refresh_res = await refresh_x_oauth2_tokens_activity(owner_user_id)
-        public_res = await collect_public_enterprise_feeds_activity("all", owner_user_id)
+        if hasattr(workflow, "in_workflow") and workflow.in_workflow():
+            refresh_res = await workflow.execute_activity(
+                refresh_x_oauth2_tokens_activity,
+                owner_user_id,
+                start_to_close_timeout=timedelta(seconds=30),
+            )
+            public_res = await workflow.execute_activity(
+                collect_public_enterprise_feeds_activity,
+                args=["all", owner_user_id],
+                start_to_close_timeout=timedelta(seconds=60),
+            )
+        else:
+            refresh_res = await refresh_x_oauth2_tokens_activity(owner_user_id)
+            public_res = await collect_public_enterprise_feeds_activity("all", owner_user_id)
         return {"oauth_refresh": refresh_res, "public_collectors": public_res, "status": "completed"}
 
 

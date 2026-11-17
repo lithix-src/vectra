@@ -23,6 +23,7 @@ export interface NodeSourceItem {
 }
 
 export interface ScoreBreakdown {
+  base_signal_component?: number;
   source_authority_component: number;
   graph_centrality_component: number;
   consultant_weight: number;
@@ -164,6 +165,46 @@ export interface MCPGatewayStatus {
     denied_count: number;
   };
   recent_audit_log: MCPAuditEntry[];
+}
+
+export interface CollectorPackSchedule {
+  pack_id: string;
+  name: string;
+  tier: number;
+  enabled: boolean;
+  interval_minutes: number;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  last_items_ingested: number;
+  execution_mode: "live_rss_atom_feed" | "curated_verified_fallback" | string;
+}
+
+export interface CollectorPackItem {
+  id: string;
+  name: string;
+  tier: number;
+  source_type: string;
+  feed_urls: string[];
+  industry_verticals: string[];
+  curated_signal_count: number;
+  schedule: CollectorPackSchedule;
+}
+
+export interface CollectorPacksStatus {
+  worker_queue: string;
+  sec_edgar_user_agent: string;
+  packs: CollectorPackItem[];
+}
+
+export interface PresentationSessionData {
+  session_id: string;
+  title: string;
+  variant_lens: VariantLens;
+  industry_vertical: string;
+  copilot_synthesis: string | null;
+  created_at: string;
+  nodes: CanonicalNodeItem[];
+  edges: AssociativeEdgeItem[];
 }
 
 export interface CopilotStructuredResponse {

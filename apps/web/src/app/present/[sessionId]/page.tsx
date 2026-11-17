@@ -2,15 +2,8 @@
 
 import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import {
-  ArrowLeft,
-  Download,
-  Lock,
-  Monitor,
-  Radio,
-  ShieldCheck,
-} from "lucide-react";
-import { CanonicalNodeItem, VariantLens } from "@/types/vectra";
+import { ArrowLeft, Download, Lock, Monitor, Radio, ShieldCheck } from "lucide-react";
+import { CanonicalNodeItem, PresentationSessionData, VariantLens } from "@/types/vectra";
 
 interface BoardroomSyncMessage {
   sessionId: string;
@@ -23,16 +16,18 @@ function BoardroomPresentationContent() {
   const searchParams = useSearchParams();
   const isPresenterWindow = searchParams.get("role") === "presenter";
 
-  const [sessionData, setSessionData] = useState<any>(null);
+  const [sessionData, setSessionData] = useState<PresentationSessionData | null>(null);
   const [activeLens, setActiveLens] = useState<VariantLens>("c_suite");
   const [activeSlideIdx, setActiveSlideIdx] = useState<number>(0);
   const channelRef = useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
     const loadSession = async () => {
-      const res = await fetch(`/api/present/${params.sessionId}`);
+      const res = await fetch(
+        `/api/present/${params.sessionId}?tenant_user_id=erik&tenant_org_id=vectra-advisory`
+      );
       if (res.ok) {
-        const data = await res.json();
+        const data: PresentationSessionData = await res.json();
         setSessionData(data);
         if (data.variant_lens) setActiveLens(data.variant_lens);
       }
@@ -40,23 +35,16 @@ function BoardroomPresentationContent() {
     loadSession();
   }, [params.sessionId]);
 
-  // Real-time Dual-Window Synchronization via BroadcastChannel("vectra_boardroom_sync")
   useEffect(() => {
     if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;
     const bc = new BroadcastChannel("vectra_boardroom_sync");
     channelRef.current = bc;
-
     bc.onmessage = (event: MessageEvent<BoardroomSyncMessage>) => {
       const msg = event.data;
       if (!msg || msg.sessionId !== params.sessionId) return;
-      if (typeof msg.slideIdx === "number") {
-        setActiveSlideIdx(msg.slideIdx);
-      }
-      if (msg.lens) {
-        setActiveLens(msg.lens);
-      }
+      if (typeof msg.slideIdx === "number") setActiveSlideIdx(msg.slideIdx);
+      if (msg.lens) setActiveLens(msg.lens);
     };
-
     return () => {
       bc.close();
       channelRef.current = null;
@@ -88,18 +76,15 @@ function BoardroomPresentationContent() {
   const nodes: CanonicalNodeItem[] = sessionData?.nodes || [];
   const focusedNode = nodes[activeSlideIdx] || nodes[0] || null;
 
-  // Keyboard Navigation (ArrowRight = next slide, ArrowLeft = previous slide)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (nodes.length === 0) return;
       if (e.key === "ArrowRight") {
         e.preventDefault();
-        const nextIdx = (activeSlideIdx + 1) % nodes.length;
-        handleSelectSlide(nextIdx);
+        handleSelectSlide((activeSlideIdx + 1) % nodes.length);
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        const prevIdx = (activeSlideIdx - 1 + nodes.length) % nodes.length;
-        handleSelectSlide(prevIdx);
+        handleSelectSlide((activeSlideIdx - 1 + nodes.length) % nodes.length);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -116,7 +101,7 @@ function BoardroomPresentationContent() {
 
   const handleExportPptx = async () => {
     if (!sessionData) return;
-    const res = await fetch(`/api/export/pptx`, {
+    const res = await fetch(`/api/export/pptx?tenant_user_id=erik&tenant_org_id=vectra-advisory`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -142,7 +127,6 @@ function BoardroomPresentationContent() {
 
   return (
     <div className="min-h-screen bg-[#090D14] text-slate-100 flex flex-col p-6">
-      {/* Minimal Zero-Chrome Boardroom Bar */}
       <header className="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
         <div className="flex items-center gap-3">
           <a
@@ -158,9 +142,7 @@ function BoardroomPresentationContent() {
                   ? "SPEAKER CONSOLE (ERIK PRIVATE)"
                   : "BOARDROOM PROJECTION VIEW"}
               </span>
-              <span className="font-mono text-xs text-slate-400">
-                Session: {params.sessionId}
-              </span>
+              <span className="font-mono text-xs text-slate-400">Session: {params.sessionId}</span>
               <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                 <Radio className="w-3 h-3" /> BroadcastChannel Sync Active (←/→ Keys)
               </span>
@@ -212,7 +194,6 @@ function BoardroomPresentationContent() {
         </div>
       </header>
 
-      {/* Slide Selector Strip */}
       <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-4 border-b border-slate-800/80">
         {nodes.map((n, idx) => (
           <button
@@ -229,14 +210,11 @@ function BoardroomPresentationContent() {
             <div className="font-mono text-[10px] uppercase">
               Slide {idx + 1} • Composite {n.composite_score}
             </div>
-            <div className="text-xs font-semibold truncate max-w-[220px]">
-              {n.title}
-            </div>
+            <div className="text-xs font-semibold truncate max-w-[220px]">{n.title}</div>
           </button>
         ))}
       </div>
 
-      {/* Main Projection Content */}
       {focusedNode && (
         <div className="flex-1 grid grid-cols-12 gap-6 items-start">
           <div className="col-span-7 bg-[#101722] border border-slate-800 rounded-lg p-6 flex flex-col gap-5">
@@ -249,9 +227,7 @@ function BoardroomPresentationContent() {
               </span>
             </div>
 
-            <h2 className="text-2xl font-bold text-slate-100 leading-tight">
-              {focusedNode.title}
-            </h2>
+            <h2 className="text-2xl font-bold text-slate-100 leading-tight">{focusedNode.title}</h2>
 
             <div className="p-4 rounded bg-[#090D14] border border-slate-800">
               <div className="text-xs font-mono uppercase text-sky-400 mb-2">
@@ -271,30 +247,23 @@ function BoardroomPresentationContent() {
                 <div className="font-mono text-[10px] uppercase text-amber-400 mb-1">
                   Vendor Marketing Claim
                 </div>
-                <p className="text-slate-300 leading-relaxed">
-                  {focusedNode.claim_vendor}
-                </p>
+                <p className="text-slate-300 leading-relaxed">{focusedNode.claim_vendor}</p>
               </div>
               <div className="p-3 rounded bg-[#090D14] border border-rose-500/40">
                 <div className="font-mono text-[10px] uppercase text-rose-400 mb-1">
                   Builder Field Reality
                 </div>
-                <p className="text-slate-200 leading-relaxed">
-                  {focusedNode.claim_builder}
-                </p>
+                <p className="text-slate-200 leading-relaxed">{focusedNode.claim_builder}</p>
               </div>
               <div className="p-3 rounded bg-[#090D14] border border-emerald-500/40">
                 <div className="font-mono text-[10px] uppercase text-emerald-400 mb-1">
                   Audited Production Proof
                 </div>
-                <p className="text-slate-100 leading-relaxed">
-                  {focusedNode.claim_production}
-                </p>
+                <p className="text-slate-100 leading-relaxed">{focusedNode.claim_production}</p>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Clean Public Citations OR Private Speaker Notes (when role=presenter) */}
           <div className="col-span-5 flex flex-col gap-4">
             {isPresenterWindow && (
               <div
@@ -305,8 +274,7 @@ function BoardroomPresentationContent() {
                   <Lock className="w-4 h-4" /> Erik&apos;s Private Speaker Field Notes (Hidden on Client Screen)
                 </div>
                 <pre className="whitespace-pre-wrap text-xs font-mono text-amber-100 leading-relaxed">
-                  {focusedNode.consultant_note ||
-                    "No private consultant notes recorded for this node."}
+                  {focusedNode.consultant_note || "No private consultant notes recorded for this node."}
                 </pre>
               </div>
             )}
@@ -332,9 +300,7 @@ function BoardroomPresentationContent() {
                     </span>
                     <span className="text-slate-400">{src.author_handle}</span>
                   </div>
-                  <div className="text-xs font-semibold text-slate-100">
-                    {src.source_name}
-                  </div>
+                  <div className="text-xs font-semibold text-slate-100">{src.source_name}</div>
                   <blockquote className="text-xs text-slate-300 italic border-l-2 border-sky-400 pl-2">
                     “{src.exact_quote}”
                   </blockquote>

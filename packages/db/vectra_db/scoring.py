@@ -1,7 +1,7 @@
 """Canonical Semantic Embedding, Cosine Clustering (> 0.84), and Dynamic Composite Scoring Engine.
 
 Formula:
-Composite_Score = (SUM(Source_Authority * Recency_Decay) + Graph_Centrality) * Consultant_Weight
+Composite_Score = (0.35 * Base_Signal + SUM(Source_Authority * Recency_Decay * 9.5) + Graph_Centrality) * Consultant_Weight
 """
 from __future__ import annotations
 
@@ -98,11 +98,13 @@ def compute_composite_score(
         rel_factor = RELATION_CENTRALITY_BONUS.get(rel_type, 3.5)
         centrality += rel_factor * float(edge_weight)
 
-    raw_unweighted = base_signal_score * 0.35 + source_sum + centrality
+    base_component = base_signal_score * 0.35
+    raw_unweighted = base_component + source_sum + centrality
     clamped_weight = max(0.5, min(5.0, float(consultant_weight)))
     composite = round(raw_unweighted * clamped_weight, 1)
 
     return {
+        "base_signal_component": round(base_component, 2),
         "source_authority_component": round(source_sum, 2),
         "graph_centrality_component": round(centrality, 2),
         "consultant_weight": round(clamped_weight, 2),

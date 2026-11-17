@@ -1,12 +1,4 @@
-"""Executive Boardroom .pptx Readout Generator powered by python-pptx.
-
-Generates a 5-slide widescreen (16:9) presentation deck from any lassoed subgraph:
-1. Title & Advisory Scope Slide
-2. Executive Thesis & Multi-Lens Synthesis
-3. Verified Market Evidence Table with URLs & [Public] vs. [Subscriber Licensed] Provenance Tags
-4. Variant Diff & Contrarian Counterpoints (Vendor Claim vs. Builder Reality vs. Production Proof)
-5. 90-Day Enterprise Execution & Governance Action Plan
-"""
+"""Executive Boardroom 5-Slide .pptx Readout Generator (`apps/api/pptx_generator.py`)."""
 from __future__ import annotations
 
 import io

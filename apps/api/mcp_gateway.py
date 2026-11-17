@@ -1,391 +1,35 @@
-"""VECTRA Zero-Trust Model Context Protocol (MCP) Gateway & Broker.
+"""VECTRA Zero-Trust Model Context Protocol (MCP) Gateway & Broker (`apps/api/mcp_gateway.py`).
 
-Enforces the architectural invariant:
-  NO LLM or external agent ever receives direct access to backend databases, KMS vaults,
-  or internal services. All context retrieval, graph traversal, citation lookup, and tool
-  execution MUST be mediated through configured, policy-enforced MCP servers and tools.
-
-Capabilities:
-1. JSON-RPC 2.0 MCP Server & Broker (`initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`).
-2. Strict Zero-Trust Policy Enforcement:
-   - Blocks unproxied `stdio` shell execution servers (`allow_unproxied_stdio = False`).
-   - Enforces per-request Multi-Tenant Row-Level Security (`TenantContext`) on every MCP tool & resource.
-   - Blocks access to forbidden backend tables/secrets (`user_integrations`, `encrypted_dek`, `ciphertext`, raw SQL).
-   - Sanitizes and redacts any secret/token patterns from MCP tool outputs before model consumption.
-3. Cryptographically Signed / Verified `MCPMediatedEnvelope` required by `llm_runtime.py` before any
-   LLM synthesis can execute.
-4. Immutable in-memory + structured Audit Log of all `ALLOWED` and `DENIED` MCP operations.
+Imports schemas, catalogs, HMAC envelope verification, and output redaction from `mcp_catalog.py`
+and JSON-RPC 2.0 protocol routing from `mcp_jsonrpc.py`.
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
-import os
-import re
+import json
 import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Literal
 
-from pydantic import BaseModel, Field
-
-MCPTransportType = Literal["mcp_http_sse", "mcp_internal_broker", "stdio_unproxied"]
-
-FORBIDDEN_MCP_TARGETS = {
-    "user_integrations",
-    "tenant_integrations",
-    "encrypted_dek",
-    "ciphertext",
-    "auth_tag",
-    "kms_key_id",
-    "kms_master_key",
-    "vectra_kms_master_key",
-    "raw_sql",
-    "shell_exec",
-    "os_system",
-}
-
-SECRET_REDACTION_REGEX = re.compile(
-    r"(x_pkce_at_[a-zA-Z0-9_]+|sk-[a-zA-Z0-9]{16,}|ghp_[a-zA-Z0-9]{16,}|Bearer\s+[a-zA-Z0-9_\-\.]+|AES256GCM:[a-zA-Z0-9+/=_\-\.:]+)",
-    re.IGNORECASE,
+from mcp_catalog import (
+    DEFAULT_MCP_SERVERS,
+    FORBIDDEN_MCP_TARGETS,
+    MCP_RESOURCES_CATALOG,
+    MCP_TOOLS_CATALOG,
+    SECRET_REDACTION_REGEX,
+    MCPAuditLogEntry,
+    MCPGatewayPolicyConfig,
+    MCPGatewaySecurityError,
+    MCPJsonRpcRequest,
+    MCPMediatedEnvelope,
+    MCPPolicyViolationError,
+    MCPServerDefinition,
+    MCPTransportType,
+    sanitize_mcp_output,
+    sign_mcp_envelope,
+    verify_mcp_envelope,
 )
-
-
-class MCPGatewaySecurityError(PermissionError):
-    """Raised when an MCP request or unmediated LLM call violates Zero-Trust MCP Gateway security policy."""
-
-
-class MCPPolicyViolationError(MCPGatewaySecurityError):
-    """Raised when an MCP request or unmediated LLM call violates Zero-Trust MCP Gateway policy."""
-
-
-class MCPServerDefinition(BaseModel):
-    server_id: str
-    name: str
-    transport: MCPTransportType = "mcp_internal_broker"
-    endpoint_url: str
-    enabled: bool = True
-    allowed_scopes: List[str] = Field(default_factory=list)
-    allowed_tools: List[str] = Field(default_factory=list)
-    description: str = ""
-
-
-class MCPGatewayPolicyConfig(BaseModel):
-    enforce_mcp_mediation: bool = Field(
-        default=True,
-        description="Require all LLM context and tool access to pass through the Zero-Trust MCP Gateway.",
-    )
-    block_direct_model_db_access: bool = Field(
-        default=True,
-        description="Forbid passing raw database sessions or unbrokered service objects to the model.",
-    )
-    allow_unproxied_stdio: bool = Field(
-        default=False,
-        description="Block unproxied local stdio MCP servers that bypass OAuth/RLS policy inspection.",
-    )
-    redact_secrets_and_kms: bool = Field(
-        default=True,
-        description="Strip any KMS envelope fields or bearer tokens from MCP tool payloads.",
-    )
-    require_tenant_rls_binding: bool = Field(
-        default=True,
-        description="Require explicit tenant_user_id and tenant_org_id on every MCP JSON-RPC call.",
-    )
-    active_scopes: List[str] = Field(
-        default_factory=lambda: [
-            "graph:read",
-            "citations:read",
-            "notes:read",
-            "cypher:read",
-            "embeddings:compute",
-        ]
-    )
-
-
-class MCPAuditLogEntry(BaseModel):
-    audit_id: str
-    timestamp: str
-    tenant_user_id: str
-    tenant_org_id: str
-    server_id: str
-    jsonrpc_method: str
-    tool_or_resource: str
-    decision: Literal["ALLOWED", "DENIED"]
-    reason: str
-    latency_ms: float
-
-
-class MCPMediatedEnvelope(BaseModel):
-    """Cryptographically verified proof that LLM context was assembled exclusively via configured MCP tools."""
-
-    envelope_id: str
-    mcp_session_id: str
-    tenant_user_id: str
-    tenant_org_id: str
-    tools_invoked: List[str]
-    resources_read: List[str]
-    audit_ids: List[str]
-    direct_db_access_blocked: bool = True
-    kms_secrets_redacted: bool = True
-    signature_hmac: str
-    payload: Dict[str, Any]
-
-
-class MCPJsonRpcRequest(BaseModel):
-    jsonrpc: Literal["2.0"] = "2.0"
-    id: str | int = Field(default_factory=lambda: f"mcp-{uuid.uuid4().hex[:8]}")
-    method: Literal[
-        "initialize",
-        "tools/list",
-        "tools/call",
-        "resources/list",
-        "resources/read",
-        "prompts/list",
-    ]
-    params: Dict[str, Any] = Field(default_factory=dict)
-
-
-DEFAULT_MCP_SERVERS: Dict[str, MCPServerDefinition] = {
-    "vectra-graph-mcp": MCPServerDefinition(
-        server_id="vectra-graph-mcp",
-        name="VECTRA Canonical Knowledge Graph MCP Server",
-        transport="mcp_internal_broker",
-        endpoint_url="mcp://vectra-graph-mcp/v1",
-        enabled=True,
-        allowed_scopes=["graph:read", "cypher:read"],
-        allowed_tools=["vectra_get_rls_subgraph", "vectra_inspect_cypher"],
-        description="RLS-scoped access to Canonical Nodes, Composite Scores, and Apache AGE OpenCypher queries.",
-    ),
-    "vectra-citations-mcp": MCPServerDefinition(
-        server_id="vectra-citations-mcp",
-        name="VECTRA Primary Evidence & Citations MCP Server",
-        transport="mcp_internal_broker",
-        endpoint_url="mcp://vectra-citations-mcp/v1",
-        enabled=True,
-        allowed_scopes=["citations:read"],
-        allowed_tools=["vectra_get_verified_citations"],
-        description="RLS-scoped retrieval of [Public] and [Subscriber Licensed] primary quotes with provenance tags.",
-    ),
-    "vectra-notes-mcp": MCPServerDefinition(
-        server_id="vectra-notes-mcp",
-        name="VECTRA Consultant Field Notes & [[Wikilinks]] MCP Server",
-        transport="mcp_internal_broker",
-        endpoint_url="mcp://vectra-notes-mcp/v1",
-        enabled=True,
-        allowed_scopes=["notes:read"],
-        allowed_tools=["vectra_get_consultant_notes", "vectra_preview_wikilink_edges"],
-        description="Tenant-isolated access to consultant Markdown field notes and extracted [[Wikilink]] edges.",
-    ),
-    "vectra-embeddings-mcp": MCPServerDefinition(
-        server_id="vectra-embeddings-mcp",
-        name="VECTRA Local 1536-d Vector Embeddings, Public Intel & Deliverables MCP Server",
-        transport="mcp_internal_broker",
-        endpoint_url="mcp://vectra-embeddings-mcp/v1",
-        enabled=True,
-        allowed_scopes=["embeddings:compute", "graph:read"],
-        allowed_tools=[
-            "vectra_compute_local_embedding",
-            "vectra_list_curated_packs",
-            "vectra_run_collector_pack",
-            "vectra_prepare_deliverable_manifest",
-        ],
-        description="Sovereign local embedding computation (1536-d), curated intel packs, and deliverable manifests.",
-    ),
-}
-
-MCP_TOOLS_CATALOG: List[Dict[str, Any]] = [
-    {
-        "name": "vectra_get_rls_subgraph",
-        "server_id": "vectra-graph-mcp",
-        "required_scope": "graph:read",
-        "description": "Fetch RLS-filtered Canonical Nodes and incident Associative Edges for a given subgraph selection.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "node_ids": {"type": "array", "items": {"type": "string"}},
-                "vertical": {"type": "string", "default": "All Verticals"},
-            },
-            "required": [],
-        },
-    },
-    {
-        "name": "vectra_get_verified_citations",
-        "server_id": "vectra-citations-mcp",
-        "required_scope": "citations:read",
-        "description": "Retrieve RLS-filtered verbatim primary source quotes and provenance licenses for selected nodes.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "node_ids": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["node_ids"],
-        },
-    },
-    {
-        "name": "vectra_get_consultant_notes",
-        "server_id": "vectra-notes-mcp",
-        "required_scope": "notes:read",
-        "description": "Retrieve tenant-private Obsidian [[Wikilink]] field notes for selected Canonical Nodes.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "node_ids": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["node_ids"],
-        },
-    },
-    {
-        "name": "vectra_preview_wikilink_edges",
-        "server_id": "vectra-notes-mcp",
-        "required_scope": "notes:read",
-        "description": "Extract and preview Obsidian [[Wikilink]] associative edges from consultant Markdown notes.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "markdown_content": {"type": "string", "default": ""},
-            },
-            "required": [],
-        },
-    },
-    {
-        "name": "vectra_inspect_cypher",
-        "server_id": "vectra-graph-mcp",
-        "required_scope": "cypher:read",
-        "description": "Return the parameterized Apache AGE OpenCypher query for the tenant's RLS-scoped graph.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "vertical": {"type": "string", "default": "All Verticals"},
-            },
-            "required": [],
-        },
-    },
-    {
-        "name": "vectra_compute_local_embedding",
-        "server_id": "vectra-embeddings-mcp",
-        "required_scope": "embeddings:compute",
-        "description": "Compute a 1536-d semantic embedding vector using the configured Sovereign Local LLM runtime.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "text": {"type": "string"},
-            },
-            "required": ["text"],
-        },
-    },
-    {
-        "name": "vectra_list_curated_packs",
-        "server_id": "vectra-embeddings-mcp",
-        "required_scope": "graph:read",
-        "description": "List curated Public Enterprise Intelligence collector packs (Fortune 500 CapEx, SEC 8-K, NIST AI RMF) and worker schedules.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        },
-    },
-    {
-        "name": "vectra_run_collector_pack",
-        "server_id": "vectra-embeddings-mcp",
-        "required_scope": "graph:read",
-        "description": "Trigger a curated or live RSS/SEC EDGAR/NIST collector pack via the Zero-Trust MCP Gateway.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "pack_id": {"type": "string", "default": "all"},
-                "allow_live_http": {"type": "boolean", "default": False},
-            },
-            "required": [],
-        },
-    },
-    {
-        "name": "vectra_prepare_deliverable_manifest",
-        "server_id": "vectra-embeddings-mcp",
-        "required_scope": "graph:read",
-        "description": "Prepare a deliverable manifest for Executive .pptx and .md Advisory Brief generation.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "node_ids": {"type": "array", "items": {"type": "string"}},
-                "variant_lens": {"type": "string", "default": "c_suite"},
-            },
-            "required": [],
-        },
-    },
-]
-
-MCP_RESOURCES_CATALOG: List[Dict[str, Any]] = [
-    {
-        "uri": "mcp://vectra-graph-mcp/subgraph",
-        "name": "RLS-Scoped Canonical Knowledge Subgraph",
-        "server_id": "vectra-graph-mcp",
-        "mimeType": "application/json",
-        "required_scope": "graph:read",
-    },
-    {
-        "uri": "mcp://vectra-citations-mcp/sources",
-        "name": "Verified Primary Source Citations ([Public] & [Subscriber Licensed])",
-        "server_id": "vectra-citations-mcp",
-        "mimeType": "application/json",
-        "required_scope": "citations:read",
-    },
-    {
-        "uri": "mcp://vectra-notes-mcp/field-notes",
-        "name": "Tenant-Private Consultant Field Notes & [[Wikilinks]]",
-        "server_id": "vectra-notes-mcp",
-        "mimeType": "application/json",
-        "required_scope": "notes:read",
-    },
-]
-
-
-def _signing_secret() -> bytes:
-    return os.getenv(
-        "VECTRA_KMS_MASTER_KEY",
-        "vectra-enterprise-kms-master-kek-2026-erik-advisory-os",
-    ).encode("utf-8")
-
-
-def sign_mcp_envelope(envelope_id: str, mcp_session_id: str, tenant_user_id: str, tools: List[str]) -> str:
-    msg = f"{envelope_id}:{mcp_session_id}:{tenant_user_id}:{','.join(tools)}".encode("utf-8")
-    return hmac.new(_signing_secret(), msg, hashlib.sha256).hexdigest()
-
-
-def verify_mcp_envelope(envelope: MCPMediatedEnvelope | None) -> None:
-    """Verify that LLM context was mediated through the Zero-Trust MCP Gateway before model execution."""
-    if envelope is None:
-        raise MCPPolicyViolationError(
-            "Direct model access to backend data is forbidden. All LLM context must be supplied via an "
-            "MCPMediatedEnvelope issued by the VECTRA Zero-Trust MCP Gateway."
-        )
-    if not envelope.direct_db_access_blocked or not envelope.kms_secrets_redacted:
-        raise MCPPolicyViolationError(
-            "MCPMediatedEnvelope failed security policy flags (direct_db_access_blocked / kms_secrets_redacted)."
-        )
-    expected_sig = sign_mcp_envelope(
-        envelope.envelope_id,
-        envelope.mcp_session_id,
-        envelope.tenant_user_id,
-        envelope.tools_invoked,
-    )
-    if not hmac.compare_digest(envelope.signature_hmac, expected_sig):
-        raise MCPPolicyViolationError("Invalid HMAC signature on MCPMediatedEnvelope.")
-
-
-def sanitize_mcp_output(data: Any) -> Any:
-    """Recursively strip any forbidden KMS/credential keys and redact secret token patterns."""
-    if isinstance(data, dict):
-        cleaned: Dict[str, Any] = {}
-        for k, v in data.items():
-            if str(k).lower() in FORBIDDEN_MCP_TARGETS:
-                continue
-            cleaned[k] = sanitize_mcp_output(v)
-        return cleaned
-    if isinstance(data, list):
-        return [sanitize_mcp_output(item) for item in data]
-    if isinstance(data, str):
-        return SECRET_REDACTION_REGEX.sub("[REDACTED_BY_MCP_GATEWAY]", data)
-    return data
+from mcp_jsonrpc import dispatch_mcp_jsonrpc
 
 
 class MCPZeroTrustGateway:
@@ -489,9 +133,8 @@ class MCPZeroTrustGateway:
             )
             raise MCPPolicyViolationError(audit.reason)
 
-        # Block any attempt to access forbidden targets or raw SQL/KMS credentials
         lowered_tool = tool_name.lower()
-        serialized_args = str(arguments).lower()
+        serialized_args = json.dumps(arguments, default=str).lower()
         if lowered_tool in FORBIDDEN_MCP_TARGETS or any(
             forbidden in lowered_tool or forbidden in serialized_args
             for forbidden in FORBIDDEN_MCP_TARGETS
@@ -524,7 +167,7 @@ class MCPZeroTrustGateway:
 
         server_id = tool_meta["server_id"]
         server = self.servers.get(server_id)
-        if not server or not server.enabled:
+        if not server or not server.enabled or (server.allowed_tools and tool_name not in server.allowed_tools):
             audit = self._record_audit(
                 tenant_user_id=tenant_user_id,
                 tenant_org_id=tenant_org_id,
@@ -532,7 +175,7 @@ class MCPZeroTrustGateway:
                 jsonrpc_method="tools/call",
                 tool_or_resource=tool_name,
                 decision="DENIED",
-                reason=f"MCP Server '{server_id}' is disabled or unregistered.",
+                reason=f"MCP Server '{server_id}' is disabled or does not permit '{tool_name}'.",
                 latency_ms=(time.perf_counter() - start) * 1000.0,
             )
             raise MCPPolicyViolationError(audit.reason)
@@ -659,125 +302,12 @@ class MCPZeroTrustGateway:
         tenant_user_id: str,
         tenant_org_id: str,
     ) -> Dict[str, Any]:
-        """Handle standard Model Context Protocol JSON-RPC 2.0 requests."""
-        start = time.perf_counter()
-        if req.method == "initialize":
-            self._record_audit(
-                tenant_user_id=tenant_user_id,
-                tenant_org_id=tenant_org_id,
-                server_id="vectra-mcp-gateway",
-                jsonrpc_method="initialize",
-                tool_or_resource="protocol/2025-03-26",
-                decision="ALLOWED",
-                reason="Initialized Zero-Trust MCP Gateway session",
-                latency_ms=(time.perf_counter() - start) * 1000.0,
-            )
-            return {
-                "jsonrpc": "2.0",
-                "id": req.id,
-                "result": {
-                    "protocolVersion": "2025-03-26",
-                    "serverInfo": {
-                        "name": "vectra-zero-trust-mcp-gateway",
-                        "version": "1.2.0",
-                    },
-                    "capabilities": {
-                        "tools": {"listChanged": False},
-                        "resources": {"subscribe": False, "listChanged": False},
-                    },
-                    "policy": self.policy.model_dump(),
-                },
-            }
-
-        if req.method == "tools/list":
-            return {
-                "jsonrpc": "2.0",
-                "id": req.id,
-                "result": {"tools": MCP_TOOLS_CATALOG},
-            }
-
-        if req.method == "resources/list":
-            return {
-                "jsonrpc": "2.0",
-                "id": req.id,
-                "result": {"resources": MCP_RESOURCES_CATALOG},
-            }
-
-        if req.method == "prompts/list":
-            return {
-                "jsonrpc": "2.0",
-                "id": req.id,
-                "result": {
-                    "prompts": [
-                        {
-                            "name": "vectra_subgraph_advisory_synthesis",
-                            "description": "Synthesize lassoed Canonical Nodes via MCP-mediated RAG.",
-                        }
-                    ]
-                },
-            }
-
-        if req.method == "resources/read":
-            uri = str(req.params.get("uri", ""))
-            uri_to_tool = {
-                "mcp://vectra-graph-mcp/subgraph": ("vectra_get_rls_subgraph", {"node_ids": [], "vertical": "All Verticals"}),
-                "mcp://vectra-citations-mcp/sources": ("vectra_get_verified_citations", {"node_ids": []}),
-                "mcp://vectra-notes-mcp/field-notes": ("vectra_get_consultant_notes", {"node_ids": []}),
-            }
-            if uri not in uri_to_tool:
-                self._record_audit(
-                    tenant_user_id=tenant_user_id,
-                    tenant_org_id=tenant_org_id,
-                    server_id="vectra-mcp-gateway",
-                    jsonrpc_method="resources/read",
-                    tool_or_resource=uri,
-                    decision="DENIED",
-                    reason=f"Unknown or unauthorized MCP resource URI '{uri}'.",
-                    latency_ms=(time.perf_counter() - start) * 1000.0,
-                )
-                raise MCPPolicyViolationError(f"Unauthorized MCP resource URI: {uri}")
-            tool_name, default_args = uri_to_tool[uri]
-            res_data, audit = await self.call_tool(
-                tool_name=tool_name,
-                arguments=default_args,
-                tenant_user_id=tenant_user_id,
-                tenant_org_id=tenant_org_id,
-            )
-            return {
-                "jsonrpc": "2.0",
-                "id": req.id,
-                "result": {
-                    "contents": [
-                        {
-                            "uri": uri,
-                            "mimeType": "application/json",
-                            "data": res_data,
-                            "audit_id": audit.audit_id,
-                        }
-                    ]
-                },
-            }
-
-        if req.method == "tools/call":
-            tool_name = str(req.params.get("name", ""))
-            arguments = dict(req.params.get("arguments") or {})
-            res_data, audit = await self.call_tool(
-                tool_name=tool_name,
-                arguments=arguments,
-                tenant_user_id=tenant_user_id,
-                tenant_org_id=tenant_org_id,
-            )
-            return {
-                "jsonrpc": "2.0",
-                "id": req.id,
-                "result": {
-                    "content": [{"type": "json", "json": res_data}],
-                    "isError": False,
-                    "mcp_audit": audit.model_dump(),
-                },
-            }
-
-        raise MCPPolicyViolationError(f"Unsupported MCP JSON-RPC method: {req.method}")
+        return await dispatch_mcp_jsonrpc(
+            self,
+            req,
+            tenant_user_id=tenant_user_id,
+            tenant_org_id=tenant_org_id,
+        )
 
     def get_status(self) -> Dict[str, Any]:
         allowed_count = sum(1 for a in self.audit_log if a.decision == "ALLOWED")
@@ -796,3 +326,24 @@ class MCPZeroTrustGateway:
             },
             "recent_audit_log": [a.model_dump() for a in self.audit_log[:25]],
         }
+
+
+__all__ = [
+    "DEFAULT_MCP_SERVERS",
+    "FORBIDDEN_MCP_TARGETS",
+    "MCPAuditLogEntry",
+    "MCPGatewayPolicyConfig",
+    "MCPGatewaySecurityError",
+    "MCPJsonRpcRequest",
+    "MCPMediatedEnvelope",
+    "MCPPolicyViolationError",
+    "MCPServerDefinition",
+    "MCPTransportType",
+    "MCPZeroTrustGateway",
+    "MCP_RESOURCES_CATALOG",
+    "MCP_TOOLS_CATALOG",
+    "SECRET_REDACTION_REGEX",
+    "sanitize_mcp_output",
+    "sign_mcp_envelope",
+    "verify_mcp_envelope",
+]

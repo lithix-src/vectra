@@ -1,100 +1,71 @@
-# `vectra-api` — FastAPI Intelligence Gateway, Co-Pilot RAG & `.pptx` Engine (`/apps/api`)
+# `vectra-api` — Modular FastAPI Gateway, Sovereign Local LLM & Zero-Trust MCP (`/apps/api`)
 
-`vectra-api` is the asynchronous Python FastAPI service (`port 8000`) powering **VECTRA**. It enforces Row-Level Security (`RLS`) per request, syncs Obsidian `[[wikilinks]]` into graph edges, handles X OAuth 2.0 PKCE and inbound paid newsletter webhooks, executes Subgraph Co-Pilot RAG queries, and generates downloadable `.pptx` boardroom presentations via `python-pptx`.
+`vectra-api` is the modular asynchronous FastAPI service (`port 8000`) powering **VECTRA**. All files adhere to the `<= 350 + 20%` (`420` LOC) modularity standard defined in [`../../AGENTS.md`](../../AGENTS.md).
 
 ---
 
 ## Table of Contents
-1. [Module Overview](#1-module-overview)
-2. [REST & Webhook API Reference](#2-rest--webhook-api-reference)
-3. [Obsidian `[[Wikilink]]` Bidirectional Edge Synchronization](#3-obsidian-wikilink-bidirectional-edge-synchronization)
-4. [Subgraph Co-Pilot Structured RAG Engine](#4-subgraph-co-pilot-structured-rag-engine)
-5. [Executive `.pptx` Deck Generator (`python-pptx`)](#5-executive-pptx-deck-generator-python-pptx)
-6. [Cross-Platform `uv` & `uvx` Commands](#6-cross-platform-uv--uvx-commands)
+1. [Modular File Map](#1-modular-file-map)
+2. [REST, Local LLM, MCP & Deliverable Endpoints](#2-rest-local-llm-mcp--deliverable-endpoints)
+3. [Sovereign Local LLM Policy & Zero-Trust MCP Mediation](#3-sovereign-local-llm-policy--zero-trust-mcp-mediation)
+4. [Sanitized 3-Tier RLS OpenCypher & `[[Wikilink]]` Edge Sync](#4-sanitized-3-tier-rls-opencypher--wikilink-edge-sync)
+5. [Running Locally (`uv`)](#5-running-locally-uv)
 
 ---
 
-## 1. Module Overview
+## 1. Modular File Map
 
 | File | Primary Symbols | Responsibility |
 | :--- | :--- | :--- |
-| [`main.py`](./main.py) | `app`, `get_graph`, `save_consultant_note_and_sync_wikilinks`, `query_subgraph_copilot`, `export_pptx_deck` | FastAPI application, Pydantic v2 / `instructor` structured response schemas, OAuth 2.0 PKCE & webhook routes. |
-| [`llm_runtime.py`](./llm_runtime.py) | `LocalLLMConfig`, `probe_local_llm_status`, `generate_local_rag_synthesis`, `embed_text_local_1536`, `validate_sovereign_local_policy` | Sovereign Local-First LLM & Embedding engine (`ollama` default, `litellm_proxy`, `vllm`, `llamacpp`, `lmstudio`) with strict zero-commercial cloud guardrail. |
-| [`mcp_gateway.py`](./mcp_gateway.py) | `MCPZeroTrustGateway`, `MCPMediatedEnvelope`, `verify_mcp_envelope`, `sanitize_mcp_output` | Zero-Trust Model Context Protocol (MCP) JSON-RPC 2.0 Gateway & Broker enforcing 0% direct model DB/KMS access. |
-| [`pptx_generator.py`](./pptx_generator.py) | `build_subgraph_pptx()` | 5-slide widescreen (16:9) executive presentation builder using `python-pptx`. |
-| [`pyproject.toml`](./pyproject.toml) | `vectra-api` | Package metadata and dependencies (`fastapi`, `uvicorn`, `pydantic`, `instructor`, `python-pptx`, `vectra-db`). |
+| [`main.py`](./main.py) | `app`, core `/api/graph`, `/api/llm/*`, `/api/mcp/*` routes | FastAPI app entrypoint, router composition, and backward-compatible symbol re-exports. |
+| [`schemas.py`](./schemas.py) | `CopilotQueryRequest`, `CopilotStructuredResponse`, `CollectorScheduleUpdateRequest`, `CustomSignalIngestRequest` | Pydantic v2 request/response schemas and vertical/lens literals. |
+| [`graph_service.py`](./graph_service.py) | `build_rls_graph_payload`, `build_safe_cypher_query`, `sync_consultant_note_and_wikilinks` | RLS graph serialization, injection-safe 3-tier RLS Apache AGE openCypher builder, and `[[Wikilink]]` edge upsertion. |
+| [`llm_policy.py`](./llm_policy.py) | `LocalLLMConfig`, `validate_sovereign_local_policy`, `project_vector_to_1536` | Zero-commercial cloud LLM guardrail (`VECTRA_BLOCK_COMMERCIAL_LLMS=true`) and `1536-d` L2 vector projection. |
+| [`llm_runtime.py`](./llm_runtime.py) | `probe_local_llm_status`, `embed_text_local_1536`, `generate_local_rag_synthesis` | Local execution engine (`ollama` default, `litellm_proxy`, `vllm`, `llamacpp`, `lmstudio`) with `httpx.Timeout(60.0, connect=2.0)`. |
+| [`mcp_catalog.py`](./mcp_catalog.py) | `DEFAULT_MCP_SERVERS`, `MCP_TOOLS_CATALOG`, `verify_mcp_envelope`, `sanitize_mcp_output` | 4 internal MCP servers, 9 tool schemas, HMAC-SHA256 envelope signing, and KMS/token redaction. |
+| [`mcp_jsonrpc.py`](./mcp_jsonrpc.py) | `dispatch_mcp_jsonrpc` | JSON-RPC 2.0 protocol handler (`initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`). |
+| [`mcp_gateway.py`](./mcp_gateway.py) | `MCPZeroTrustGateway` | Policy-enforced MCP broker blocking `stdio_unproxied`, `FORBIDDEN_MCP_TARGETS`, and unmediated DB access. |
+| [`mcp_tools.py`](./mcp_tools.py) | `mcp_gateway` + 9 `_mcp_tool_*` handlers | Binds RLS-scoped graph, citation, note, Cypher, embedding, collector, and manifest handlers. |
+| [`routes_ingest_auth.py`](./routes_ingest_auth.py) | `router`, collector, integration, PKCE & webhook routes | KMS Vault metadata, X OAuth 2.0 PKCE, dynamic `intel+<user>@` newsletter webhook, custom signal ingest & collector schedules. |
+| [`routes_copilot_deliverables.py`](./routes_copilot_deliverables.py) | `router`, `query_subgraph_copilot`, `export_pptx_deck`, `export_executive_brief` | MCP-mediated Subgraph Co-Pilot RAG, Boardroom sessions, `.pptx` & `.md` deliverable generators. |
+| [`pptx_generator.py`](./pptx_generator.py) | `build_subgraph_pptx()` | 5-slide 16:9 dark executive presentation builder (`python-pptx`). |
 
 ---
 
-## 2. REST & Webhook API Reference
+## 2. REST, Local LLM, MCP & Deliverable Endpoints
 
 | Method | Path | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/health` | Health status, active RLS enforcement flag, KMS cipher metadata (`AES-256-GCM`), and active Sovereign Local LLM config. |
-| `GET` | `/api/llm/status` | Probes the active local LLM daemon (`ollama` default, `litellm_proxy`, `vllm`, `llamacpp`, `lmstudio`), lists discovered local models, and reports zero-commercial policy status. |
-| `POST` | `/api/llm/config` | Switches the active local LLM provider, base URL, chat model, or embedding model at runtime (`HTTP 400` if any commercial cloud endpoint/model is passed). |
-| `POST` | `/api/llm/embed` | Generates a `1536-d` vector embedding via the configured local embedding model (`nomic-embed-text` / `bge-m3`) with deterministic local projection & fallback. |
-| `GET` | `/api/mcp/status` | Returns Zero-Trust MCP Gateway policy, registered MCP servers/tools, and immutable audit log. |
-| `POST` | `/api/mcp/rpc` | Executes a Zero-Trust Model Context Protocol (MCP) JSON-RPC 2.0 request (`initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`). |
-| `GET` | `/api/graph` | Returns RLS-filtered `canonical_nodes` (ranked by real-time `composite_score`), `associative_edges`, `sources`, and `consultant_note`. Supports `?vertical=` filter. |
-| `GET` | `/api/graph/cypher` | Returns the Apache AGE OpenCypher SQL query corresponding to the active vertical and tenant RLS scope. |
-| `PATCH` | `/api/nodes/{node_id}/weight` | Updates `consultant_weight` (`0.5x–5.0x`) and recomputes `Composite_Score` in real time. |
-| `PUT` | `/api/nodes/{node_id}/note` | Saves Markdown field note, parses `[[Wikilinks]]`, and auto-upserts `associative_edges`. |
-| `POST` | `/api/edges` | Creates or updates a manual directed `associative_edge` (`ENABLES`, `CONFLICTS_WITH`, `REGULATES`, `CASE_STUDY_OF`, `REPLACES`). |
-| `GET` | `/api/integrations` | Lists `user_integrations` metadata (DEK fingerprint, scopes, expiry status) without exposing plaintext tokens. |
-| `GET` | `/api/auth/x/connect` | Generates an X (Twitter) OAuth 2.0 PKCE `S256` challenge URL (`tweet.read`, `users.read`, `list.read`, `bookmark.read`, `offline.access`). |
-| `GET` | `/api/auth/x/callback` | Completes PKCE exchange and triggers Temporal worker token sealing. |
-| `POST` | `/api/integrations/{provider}/refresh` | Invokes worker in-memory KMS decryption and token/cookie rotation. |
-| `POST` | `/api/webhooks/inbound-email` | Parses forwarded paid newsletters sent to `intel+erik@ingest.vectra.ai` and clusters them onto 14-day Canonical Nodes (`cosine > 0.84`). |
-| `POST` | `/api/signals/ingest` | Ingests a custom interactive field signal (`CustomSignalIngestRequest`) and clusters it into 14-day Canonical Nodes under the caller's tenant RLS scope. |
-| `POST` | `/api/collectors/run` | Runs Public Enterprise & Regulatory Collectors (F500 Eng Blogs, SEC EDGAR 8-K/10-K, NIST/EU AI Act/FDA). |
-| `GET` | `/api/collectors/packs` | Lists curated collector packs (`f500_ai_capex`, `sec_edgar_8k`, `nist_eu_ai_act`) and their worker polling schedules. |
-| `POST` | `/api/collectors/schedule` | Configures collector pack polling interval and optionally triggers an immediate run. |
-| `POST` | `/api/copilot/query` | Executes Subgraph Co-Pilot RAG strictly over lasso-selected nodes, edges, quotes, and private field notes using Sovereign Local LLM (`ollama` / `litellm_proxy` / `vllm` / `llamacpp`). |
-| `POST` | `/api/present/session` | Creates a Boardroom Mode presentation session (`/present/[sessionId]`). |
-| `POST` | `/api/export/pptx` | Streams a 5-slide widescreen `.pptx` presentation deck from the selected subgraph. |
-| `POST` | `/api/export/brief` | Streams a comprehensive Markdown Executive Advisory Memorandum (`VECTRA_Executive_Brief.md`, `text/markdown`) with Multi-Lens Synthesis, Variant Diff Matrix, Verified Primary Evidence Table, and 90-Day Action Plan. |
+| `GET` | `/api/health` | Service health, active RLS/KMS flags, and active Sovereign Local LLM configuration. |
+| `GET` / `POST` | `/api/llm/status` • `/api/llm/config` • `/api/llm/embed` | Probe local LLM daemon, switch local runtime/model (`HTTP 400` on commercial cloud hosts/models), or compute `1536-d` embeddings. |
+| `GET` / `POST` | `/api/mcp/status` • `/api/mcp/policy` • `/api/mcp/servers` • `/api/mcp/rpc` | Inspect/configure Zero-Trust MCP Gateway and execute JSON-RPC 2.0 tool/resource calls. |
+| `GET` | `/api/graph` • `/api/graph/cypher` | Fetch RLS-scoped Canonical Graph (`?vertical=`) or sanitized 3-tier RLS Apache AGE openCypher SQL. |
+| `PATCH` / `PUT` / `POST` | `/api/nodes/{id}/weight` • `/api/nodes/{id}/note` • `/api/edges` | Adjust Consultant Weight (`0.5x–5.0x`), sync Obsidian `[[Wikilink]]` notes, or create manual edges. |
+| `GET` / `POST` | `/api/integrations` • `/api/integrations/{provider}/refresh` • `/api/auth/x/*` | Inspect masked `AES-256-GCM` envelopes, rotate tokens in worker memory, or run X OAuth 2.0 PKCE. |
+| `GET` / `POST` | `/api/collectors/packs` • `/api/collectors/schedule` • `/api/collectors/run` | Inspect curated collector packs, configure polling intervals (`5m–1440m`), and trigger immediate runs. |
+| `POST` | `/api/webhooks/inbound-email` • `/api/signals/ingest` | Cluster forwarded paid newsletters (`intel+<user>@ingest.vectra.ai`) or custom field signals (`cosine > 0.84`). |
+| `POST` / `GET` | `/api/copilot/query` • `/api/present/session` • `/api/present/{id}` • `/api/export/pptx` • `/api/export/brief` | Run MCP-mediated Subgraph Co-Pilot RAG, launch Boardroom Mode, or download `.pptx` / `.md` deliverables. |
 
 ---
 
-## 3. Obsidian `[[Wikilink]]` Bidirectional Edge Synchronization
+## 3. Sovereign Local LLM Policy & Zero-Trust MCP Mediation
 
-When Erik saves a note via `PUT /api/nodes/{node_id}/note`:
-1. `extract_wikilinks()` parses all `[[Target Node Title]]` references.
-2. Each target is matched against visible `CanonicalNode` records (by exact title, slug, or case-insensitive substring).
-3. Matching targets are automatically upserted into `associative_edges` (`is_user_created = True`, `visibility = 'user_private'`) and returned to the frontend so `react-force-graph-2d` renders the new gold edge immediately.
+- **Commercial Cloud Guardrail ([`llm_policy.py`](./llm_policy.py))**: Blocks `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, `openrouter.ai`, etc., and model prefixes `gpt-*`, `claude-*`, `gemini-*`, `o1-*`, `o3-*`, `o4-*`.
+- **Mandatory MCP Envelope ([`mcp_gateway.py`](./mcp_gateway.py))**: `generate_local_rag_synthesis()` verifies the HMAC-SHA256 signature on `MCPMediatedEnvelope` before any model call executes, raising `MCPPolicyViolationError` on unmediated calls.
 
 ---
 
-## 4. Subgraph Co-Pilot Structured RAG Engine
+## 4. Sanitized 3-Tier RLS OpenCypher & `[[Wikilink]]` Edge Sync
 
-`POST /api/copilot/query` accepts:
-- `node_ids`: List of lasso-selected Canonical Node IDs
-- `question`: Strategic or architectural query
-- `variant_lens`: `c_suite` | `cto` | `contrarian`
-
-It serializes the subgraph's nodes, incident edges, verbatim primary quotes (`[Public]` + `[Subscriber Licensed]`), and Erik's private field notes into a strict `CopilotStructuredResponse` (`executive_answer`, `architectural_implications`, `contrarian_risks`, `recommended_90_day_actions`, `citations_used`).
+- `build_safe_cypher_query()` in [`graph_service.py`](./graph_service.py) strips injection characters and emits full `global` / `org_private` / `user_private` visibility predicates.
+- `sync_consultant_note_and_wikilinks()` parses `[[Target Node]]` links and upserts `user_private` `associative_edges`.
 
 ---
 
-## 5. Executive `.pptx` Deck Generator (`python-pptx`)
+## 5. Running Locally (`uv`)
 
-[`pptx_generator.py`](./pptx_generator.py) generates a 16:9 widescreen dark-themed presentation containing:
-1. **Slide 1**: Title, Variant Lens Badge, Subgraph KPI Summary Cards
-2. **Slide 2**: Executive Thesis & Ranked Canonical Signal Synthesis
-3. **Slide 3**: Verified Market Evidence Table with Direct URLs & `[Public]` vs. `[Subscriber Licensed]` Provenance Tags
-4. **Slide 4**: Contrarian Counterpoints & Variant Diff Matrix (Vendor Claim vs. Builder Reality vs. Production Proof)
-5. **Slide 5**: 90-Day Enterprise Execution & Governance Action Plan (Days 1–30, 31–60, 61–90)
-
----
-
-## 6. Cross-Platform `uv` & `uvx` Commands
-
-```powershell
-# Start FastAPI server with hot-reload from monorepo root
+```bash
 uv run python scripts/vectra_cli.py api
-
-# Or run directly via uvicorn inside apps/api
-cd apps/api
-uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+# or concurrent API + Next.js web:
+uv run python scripts/vectra_cli.py dev
 ```

@@ -1,93 +1,79 @@
-# `@vectra/web` — Next.js 15 3-Pane Progressive Disclosure UI & Boardroom Engine (`/apps/web`)
+# `@vectra/web` — Modular Next.js 15 3-Pane Workspace & Boardroom UI (`/apps/web`)
 
-`@vectra/web` is the Next.js 15 (App Router, React 19, TypeScript) frontend for **VECTRA**, running on `http://localhost:3000`. It implements a tactical dark obsidian interface designed for 30-second executive situational awareness, multi-lens variant analysis, associative graph exploration, and one-click boardroom presentation instantiation.
+`@vectra/web` is the Next.js 15 (App Router, React 19, strict TypeScript) frontend for **VECTRA**. All components, hooks, and modals are decomposed under the `<= 350 + 20%` (`420` LOC) modularity rule in [`../../AGENTS.md`](../../AGENTS.md) and verified by **Gate 5** (`tsc --noEmit` + 15 DOM Test-IDs) in [`../../scripts/review_gates.py`](../../scripts/review_gates.py) plus real-Chromium Playwright E2E testing.
 
 ---
 
 ## Table of Contents
-1. [Component & Route Architecture](#1-component--route-architecture)
-2. [3-Pane Progressive Disclosure Layout](#2-3-pane-progressive-disclosure-layout)
-3. [Associative Knowledge Graph (`react-force-graph-2d`)](#3-associative-knowledge-graph-react-force-graph-2d)
-4. [Variant Diff Matrix (`@xyflow/react` + Synchronized Table)](#4-variant-diff-matrix-xyflowreact--synchronized-table)
-5. [Obsidian `[[Wikilink]]` Editor (`@tiptap/react`)](#5-obsidian-wikilink-editor-tiptapreact)
-6. [Boardroom Mode & Dual-Window Presenter Console (`/present/[sessionId]`)](#6-boardroom-mode--dual-window-presenter-console-presentsessionid)
-7. [Cross-Platform `pnpm` Commands](#7-cross-platform-pnpm-commands)
+1. [Modular Component, Hook & Route Map](#1-modular-component-hook--route-map)
+2. [Target Context Expression & Explainable Match Engine](#2-target-context-expression--explainable-match-engine)
+3. [Data Association Navigator & 1-Hop Graph Highlighting](#3-data-association-navigator--1-hop-graph-highlighting)
+4. [Interactive Modals & Enforced DOM Test-IDs](#4-interactive-modals--enforced-dom-test-ids)
+5. [Boardroom Mode & Dual-Window `BroadcastChannel` Sync](#5-boardroom-mode--dual-window-broadcastchannel-sync)
+6. [Frontend Commands (`pnpm` / `vectra_cli.py`)](#6-frontend-commands-pnpm--vectra_clipy)
 
 ---
 
-## 1. Component & Route Architecture
+## 1. Modular Component, Hook & Route Map
 
-| File | Symbol | Purpose |
+| File | Primary Export | Responsibility |
 | :--- | :--- | :--- |
-| [`src/app/page.tsx`](./src/app/page.tsx) | `VectraAdvisoryWorkspace` | Main 3-Pane Progressive Disclosure workspace, Top Executive Header, Variant Lens Switcher, `+ Ingest Signal` Modal, `Cypher & Score Math` Inspector, `cmdk` (`Cmd+K`) Command Palette, and Subgraph Co-Pilot. |
-| [`src/app/present/[sessionId]/page.tsx`](./src/app/present/[sessionId]/page.tsx) | `BoardroomPresentationPage` | Zero-chrome Boardroom Mode with dual-window Speaker Console (`?role=presenter`), `BroadcastChannel("vectra_boardroom_sync")` real-time synchronization, `ArrowLeft`/`ArrowRight` keyboard navigation, and `.pptx` export. |
-| [`src/components/AssociativeGraphCanvas.tsx`](./src/components/AssociativeGraphCanvas.tsx) | `AssociativeGraphCanvas` | Interactive 2D/WebGL force-directed graph (`react-force-graph-2d`) with `Composite_Score` node sizing, relation-colored edges, and Shift+Drag Lasso selection. |
-| [`src/components/VariantDiffMatrix.tsx`](./src/components/VariantDiffMatrix.tsx) | `VariantDiffMatrix` | `@xyflow/react` Variant Pipeline diagram + synchronized comparison table (*Vendor Marketing Claim* vs. *Independent Builder Reality* vs. *Enterprise Production Proof*). |
-| [`src/components/WikilinkNoteEditor.tsx`](./src/components/WikilinkNoteEditor.tsx) | `WikilinkNoteEditor` | `@tiptap/react` + Markdown field note editor with live `[[` node autocomplete that auto-upserts `associative_edges`. |
-| [`src/types/vectra.ts`](./src/types/vectra.ts) | `CanonicalNodeItem`, `AssociativeEdgeItem`, `VariantLens` | TypeScript interfaces matching the FastAPI Pydantic v2 models. |
+| [`src/app/page.tsx`](./src/app/page.tsx) | `VectraAdvisoryWorkspace` | Declarative composition of header, 3 panes, workspace hooks, and modals. |
+| [`src/app/present/[sessionId]/page.tsx`](./src/app/present/%5BsessionId%5D/page.tsx) | `BoardroomPresentationPage` | Dual-window `BroadcastChannel` Boardroom Projection & Private Speaker Console (`?role=presenter`). |
+| [`src/lib/contextMatcher.ts`](./src/lib/contextMatcher.ts) | `evaluateNodeContextMatch`, `getNodeAssociations` | Multi-facet context expression matcher (Title, Lens Thesis, Claims, Citations, Notes, Edge Rationales, Verticals) & 1-hop association resolver. |
+| [`src/lib/vectraDefaults.ts`](./src/lib/vectraDefaults.ts) | `VERTICAL_LIST`, `LLM_PROVIDER_PRESETS`, `DEFAULT_COLLECTOR_STATUS` | Typed provider presets, vertical list, and offline-resilient initial states. |
+| [`src/hooks/useVectraWorkspace.ts`](./src/hooks/useVectraWorkspace.ts) | `useVectraWorkspace` | Graph state, context/relation filtering, weight/note/edge mutations, 1-hop Lasso scoping, Co-Pilot RAG, and `.pptx`/`.md` downloads. |
+| [`src/hooks/useVectraRuntimeActions.ts`](./src/hooks/useVectraRuntimeActions.ts) | `useVectraRuntimeActions` | Sovereign Local LLM config, Zero-Trust MCP RPC tester, and Collector Pack scheduler actions. |
+| [`src/components/WorkspaceHeader.tsx`](./src/components/WorkspaceHeader.tsx) | `WorkspaceHeader` | Compact Variant Lens switcher (`C-Suite` \| `CTO` \| `Contrarian`), grouped Runtime status pills, and primary actions. |
+| [`src/components/LeftRailSnapView.tsx`](./src/components/LeftRailSnapView.tsx) | `LeftRailSnapView` | `#left-rail-snap-view`: `#target-context-expression-input`, context preset chips, compact vertical chips, ranked context-matched nodes, and collapsible Pulse Heatmap & KMS Vault drawers. |
+| [`src/components/CenterWorkspacePane.tsx`](./src/components/CenterWorkspacePane.tsx) | `CenterWorkspacePane` | Graph/Matrix switcher, Relation Semantics filter chips (`ALL`, `ENABLES`, `CASE_STUDY`, `REGULATES`, `CONFLICTS`, `REPLACES`), Consultant Weight slider, and canvas. |
+| [`src/components/RightRailInspector.tsx`](./src/components/RightRailInspector.tsx) | `RightRailInspector` | `#right-rail-inspector`: Focused Summary, `ContextMatchBanner`, and 4 tabs (`Links`, `Quotes`, `[[Notes]]`, `Co-Pilot`). |
+| [`src/components/ContextMatchBanner.tsx`](./src/components/ContextMatchBanner.tsx) | `ContextMatchBanner` | `#context-match-rationale-card`: Explains *why* the focused node matches the active Target Context Expression, Vertical, Lens, and Edge filter, plus score drivers. |
+| [`src/components/AssociationNavigator.tsx`](./src/components/AssociationNavigator.tsx) | `AssociationNavigator` | `#data-association-navigator`: Explores Outgoing Impacts & Upstream Drivers with verbatim `consultant_note` edge rationales, 1-click node jumping, `Lasso 1-Hop`, and inline typed link creation. |
+| [`src/components/AssociativeGraphCanvas.tsx`](./src/components/AssociativeGraphCanvas.tsx) | `AssociativeGraphCanvas` | `react-force-graph-2d` canvas with 1-hop neighborhood focus highlighting, dimmed background links, and quick-jump neighbor pills. |
+| [`src/components/VariantDiffMatrix.tsx`](./src/components/VariantDiffMatrix.tsx) | `VariantDiffMatrix` | `@xyflow/react` 3-stage verification flow + synchronized Vendor vs. Builder vs. Production table. |
+| [`src/components/WikilinkNoteEditor.tsx`](./src/components/WikilinkNoteEditor.tsx) | `WikilinkNoteEditor` | `@tiptap/react` + Markdown `[[Wikilink]]` autocomplete editor syncing `associative_edges`. |
+| [`src/components/modals/IngestAndCypherModals.tsx`](./src/components/modals/IngestAndCypherModals.tsx) | `IngestAndCypherModals` | `+ Ingest Signal` modal (`/api/signals/ingest`) & `Cypher & Score Math` modal (`/api/graph/cypher`). |
+| [`src/components/modals/RuntimeAndGatewayModals.tsx`](./src/components/modals/RuntimeAndGatewayModals.tsx) | `RuntimeAndGatewayModals` | `#local-llm-config-modal` (`/api/llm/config`) & `#mcp-gateway-modal` (`/api/mcp/rpc`). |
+| [`src/components/modals/CollectorAndCmdkModals.tsx`](./src/components/modals/CollectorAndCmdkModals.tsx) | `CollectorAndCmdkModals` | `#collector-scheduler-modal` (`/api/collectors/packs` & `/api/collectors/schedule`) + `Cmd+K` palette. |
+| [`src/types/vectra.ts`](./src/types/vectra.ts) | `CanonicalNodeItem`, `CollectorPacksStatus`, `PresentationSessionData` | Strict TypeScript contracts aligned with [`../api/schemas.py`](../api/schemas.py). |
 
 ---
 
-## 2. 3-Pane Progressive Disclosure Layout
+## 2. Target Context Expression & Explainable Match Engine
 
-1. **Top Executive Command Header, Zero-Trust MCP Inspector, Sovereign Local LLM Config & `+ Ingest Signal` Modal**:
-   - **Variant Lens Switcher**: Persistent 3-lens toggle (`C-Suite` | `CTO/Architect` | `Contrarian`).
-   - **Zero-Trust MCP Gateway Modal (`#open-mcp-gateway-modal-btn` / `#mcp-gateway-modal`)**: Inspects configured MCP servers (`vectra-graph-mcp`, `vectra-citations-mcp`, `vectra-notes-mcp`, `vectra-embeddings-mcp`), executes live JSON-RPC 2.0 `tools/call` requests against `POST /api/mcp/rpc`, and displays the immutable `ALLOWED` / `DENIED` MCP audit trail.
-   - **Sovereign Local LLM & Embeddings Modal (`#open-local-llm-modal-btn` / `#local-llm-config-modal`)**: Configures the active local inference runtime (`ollama` default, `litellm_proxy`, `vllm`, `llamacpp`, `lmstudio`), discovers local models, and enforces `VECTRA_BLOCK_COMMERCIAL_LLMS=true` (`0% Commercial Cloud`).
-   - **`+ Ingest Signal` Modal (`#open-ingest-signal-modal-btn`)**: Allows Erik to submit a custom field intelligence signal (`title`, `exact_quote`, `direct_url`, `source_name`, `provenance_license` (`subscriber_licensed` | `public`), `visibility` (`user_private` | `org_private` | `global`), and `industry_vertical`) to `POST /api/signals/ingest`, clustering into existing 14-day Canonical Nodes (`cosine > 0.84`) or instantiating a new node.
-2. **Left Rail (Snap View & Auth Health)**:
-   - **Industry Vertical Switcher**: Filter by *All Verticals*, *Financial Services*, *Healthcare & Life Sciences*, *Manufacturing & Supply Chain*, *Retail/CPG*, *Legal/Professional Services*, or *Cross-Industry Horizontal*.
-   - **Executive Pulse Heatmap**: SVG 2D quadrant plotting *Adoption Velocity* vs. *Verified ROI*.
-   - **30-Second Snap-View Feed**: Ranked canonical nodes dynamically reflecting the active Variant Lens (`C-Suite` | `CTO/Architect` | `Contrarian`).
-   - **Credential Vault & Auth Health Drawer**: Displays `AES-256-GCM` DEK fingerprints, copyable `intel+erik@ingest.vectra.ai` alias, one-click **Simulate Forwarded Issue Webhook**, **Sync Public Collectors**, and expired session cookie rotation.
-3. **Center Canvas (Dual-Mode Workspace & `Cypher & Score Math` Inspector)**:
-   - **Graph Mode** (`AssociativeGraphCanvas`) and **Variant Diff Matrix** (`VariantDiffMatrix`).
-   - Real-time **Consultant Weight Slider (`0.5x–5.0x`)**, **Lasso Select**, and **`+ Link Node`** edge creation.
-   - **`Cypher & Score Math` Modal (`#open-cypher-math-modal-btn`)**: Fetches `GET /api/graph/cypher?vertical=...` to inspect the focused node's real-time mathematical `score_breakdown` (`source_authority_component`, `graph_centrality_component`, `consultant_weight`, `composite_score`) alongside the live Apache AGE `open_cypher_sql` query with one-click copy.
-4. **Right Rail (Citation Inspector, `[[Field Notes]]` & Subgraph Co-Pilot)**:
-   - **Citations Tab**: Verbatim pull-quotes, authority tiers, `[Public]` vs. `[Subscriber Licensed]` badges, and primary URLs.
-   - **`[[Field Notes]]` Tab**: Bidirectional `[[Wikilink]]` editor.
-   - **Co-Pilot Tab**: Scoped RAG synthesis over lassoed nodes + one-click `.pptx` readout download and **Export Brief (`.md`)** (`#export-markdown-brief-btn` -> `POST /api/export/brief` -> `VECTRA_Executive_Brief.md`).
+- Typing into `#target-context-expression-input` (or clicking presets like `SR 11-7 / Audit`, `KV-Cache Latency`, `Zero-Trust MCP`, `Subscriber Exclusive`) evaluates every node across **7 semantic facets** (`Title`, `Active Lens Thesis`, `Variant Claims`, `Citation Evidence`, `[[Field Note]]`, `Edge Association`, `Vertical & Stage`).
+- Both the Left Rail cards and `#context-match-rationale-card` surface the exact matched facet badges, relevance percentage, and verbatim excerpt explaining *why* that node matches the target context expression.
 
 ---
 
-## 3. Associative Knowledge Graph (`react-force-graph-2d`)
+## 3. Data Association Navigator & 1-Hop Graph Highlighting
 
-- **Node Radius**: Proportional to `Composite_Score`.
-- **Node Border Color**: Encodes `maturity_stage` (`production_scale` = Emerald `#10B981`, `pilot` = Cyan `#38BDF8`, `research` = Amber `#F59E0B`).
-- **Directed Edge Semantics**: `ENABLES` (`#38BDF8`), `CASE_STUDY_OF` (`#10B981`), `REGULATES` (`#F59E0B`), `CONFLICTS_WITH` (`#F43F5E`), `REPLACES` (`#94A3B8`), and user-created `[[Wikilink]]` edges highlighted in gold (`#F59E0B`).
-- **Subgraph Lasso Selection**: Hold `Shift + Drag` (or toggle the `Lasso Select` toolbar button) to draw a selection box and pipe captured nodes directly into the Subgraph Co-Pilot.
+- Clicking `Links (N)` (`#right-tab-associations`) or any `N links` pill on a node card opens [`AssociationNavigator`](./src/components/AssociationNavigator.tsx), grouping edges into **Outgoing Impacts** and **Upstream Drivers & Governance Constraints**, displaying each edge's `consultant_note` rationale and shared verticals, and allowing 1-click hops across connected nodes or `Lasso 1-Hop` scoping into Co-Pilot.
+- On [`AssociativeGraphCanvas`](./src/components/AssociativeGraphCanvas.tsx), selecting a node illuminates its 1-hop neighbor ring and incident edges while dimming non-incident links (`0.24` opacity) to eliminate visual hairball clutter.
 
 ---
 
-## 4. Variant Diff Matrix (`@xyflow/react` + Synchronized Table)
+## 4. Interactive Modals & Enforced DOM Test-IDs
 
-- Renders a 3-stage `@xyflow/react` verification pipeline (*1. Vendor Marketing Claim* → *2. Builder Field Reality* → *3. Audited Enterprise Production Proof*) for the focused node.
-- Below the flow canvas, a synchronized multi-row comparison matrix lets Erik compare all visible nodes side-by-side and click inline provenance pills (`[Public]` / `[Subscriber]`) to inspect verbatim quotes.
-
----
-
-## 5. Obsidian `[[Wikilink]]` Editor (`@tiptap/react`)
-
-- Typing `[[` inside the field note editor opens an interactive autocomplete dropdown of Canonical Nodes (or click any quick-insert `+ [[Node Title]]` pill).
-- Clicking **Save Field Note & Sync `[[Wikilink]]` Edges** sends `PUT /api/nodes/{node_id}/note`, persists the note to `consultant_notes`, auto-upserts `associative_edges`, and immediately renders the new link on the canvas.
+Gate 5 in [`../../scripts/review_gates.py`](../../scripts/review_gates.py) verifies all **15** interactive DOM anchors across `src/**/*.tsx`:
+- `#open-mcp-gateway-modal-btn` & `#mcp-gateway-modal`
+- `#open-local-llm-modal-btn` & `#local-llm-config-modal`
+- `#open-collector-scheduler-modal-btn` & `#collector-scheduler-modal`
+- `#target-context-expression-input`, `#context-match-rationale-card`, `#right-tab-associations`, `#data-association-navigator`
+- `#open-ingest-signal-modal-btn`, `#subgraph-copilot-panel`, `#launch-boardroom-mode-btn`, `#left-rail-snap-view`, `#right-rail-inspector`
 
 ---
 
-## 6. Boardroom Mode & Dual-Window Presenter Console (`/present/[sessionId]`)
+## 5. Boardroom Mode & Dual-Window `BroadcastChannel` Sync
 
-- Clicking **Boardroom Mode** in the top header creates a presentation session and navigates to `/present/[sessionId]`.
-- Clicking **Open Private Speaker Window** launches `/present/[sessionId]?role=presenter` via `window.open()`, displaying Erik's private `user_private` field notes on his presenter monitor while keeping the main boardroom projection clean for C-suite clients.
-- **Real-Time Dual-Window Synchronization (`BroadcastChannel("vectra_boardroom_sync")`) & Keyboard Navigation**: Changing slides (`activeSlideIdx`) or switching Variant Lenses (`c_suite` | `cto` | `contrarian`)—via clicks or `ArrowLeft`/`ArrowRight` keys—synchronizes instantaneously between the Speaker Console and the Boardroom Projection window.
+Launching `#launch-boardroom-mode-btn` opens `/present/[sessionId]`, where **Open Private Speaker Window** (`?role=presenter`) synchronizes slides (`ArrowLeft`/`ArrowRight`) and Variant Lenses instantaneously over `BroadcastChannel("vectra_boardroom_sync")` while keeping `user_private` consultant notes isolated from the client projection window.
 
 ---
 
-## 7. Cross-Platform `pnpm` Commands
+## 6. Frontend Commands (`pnpm` / `vectra_cli.py`)
 
-```powershell
-# Start Next.js 15 development server on http://localhost:3000
-pnpm --filter @vectra/web dev
-
-# Typecheck and build production bundle
-pnpm --filter @vectra/web build
+```bash
+uv run python scripts/vectra_cli.py dev
+uv run python scripts/vectra_cli.py review
 ```

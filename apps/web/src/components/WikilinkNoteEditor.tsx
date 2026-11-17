@@ -29,12 +29,17 @@ export default function WikilinkNoteEditor({
   const [saving, setSaving] = useState(false);
   const [saveBanner, setSaveBanner] = useState<string | null>(null);
 
-  // Sync editor when activeNode changes
+  // Reset transient banner/autocomplete only when switching to a different node
   useEffect(() => {
     setMarkdownText(activeNode.consultant_note || "");
     setAutocompleteQuery(null);
     setSaveBanner(null);
-  }, [activeNode.id, activeNode.consultant_note]);
+  }, [activeNode.id]);
+
+  // Keep markdown synced if note updates externally without wiping saveBanner
+  useEffect(() => {
+    setMarkdownText(activeNode.consultant_note || "");
+  }, [activeNode.consultant_note]);
 
   // Also instantiate a TipTap editor instance so rich editing and plain [[wikilink]] markdown stay in sync
   const editor = useEditor({

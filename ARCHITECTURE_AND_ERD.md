@@ -1,76 +1,74 @@
 # ARCHITECTURE_AND_ERD — VECTRA: Enterprise AI Intelligence & Advisory OS
 
+> See [`AGENTS.md`](./AGENTS.md) for the mandatory `350 + 20%` (`420` LOC) modularity standard and [`DEPLOYMENT_AND_REVIEW_ARCHITECTURE.md`](./DEPLOYMENT_AND_REVIEW_ARCHITECTURE.md) for the 6-Gate local pre-commit review pipeline.
+
 ## 1. High-Level System Architecture
 
 ```mermaid
 flowchart TD
     subgraph Sources["Multi-Tier Intelligence Sources"]
         X["X OAuth 2.0 PKCE (Lists, Bookmarks, Builder Threads)"]
-        Email["Inbound Newsletter Webhook (intel+erik@ingest.vectra.ai)"]
+        Email["Inbound Newsletter Webhook (intel+<user>@ingest.vectra.ai)"]
         Cookie["Encrypted Session Cookie / Browserbase (Paywalled Portals)"]
-        Public["Public Collectors (F500 Eng Blogs, SEC 10-K/8-K, EU AI Act/NIST/FDA)"]
+        Public["Curated & Live RSS/Atom Collectors (F500 CapEx, SEC 8-K, NIST/EU AI Act)"]
     end
 
-    subgraph Workers["/apps/workers — Temporal.io Orchestration"]
-        TW["Temporal Worker Fleet"]
-        KMS["AES-256-GCM Envelope KMS Decryptor (In-Memory Only)"]
-        Cluster["Canonical Clustering Engine (Cosine > 0.84, 14-Day Window)"]
+    subgraph Workers["/apps/workers — worker.py & tasks.py"]
+        TW["Temporal Worker Fleet & Collector Scheduler"]
+        KMS["AES-256-GCM KMS + HKDF-SHA256 (Worker-Only Decrypt)"]
+        Cluster["Idempotent Canonical Clustering (Cosine > 0.84, 14-Day Window)"]
     end
 
     subgraph Storage["/packages/db — PostgreSQL 17 + pgvector + Apache AGE + RLS"]
-        PG[("PostgreSQL 17 (RLS Enabled)")]
+        PG[("PostgreSQL 17 (ENABLE + FORCE RLS) / SQLite Fallback")]
         VEC["pgvector HNSW Index (VECTOR 1536)"]
-        AGE["Apache AGE Graph (Cypher Sync)"]
-        REDIS[("Redis 7 Cache & PubSub")]
+        AGE["Apache AGE Graph (3-Tier RLS OpenCypher)"]
     end
 
-    subgraph MCP["/apps/api/mcp_gateway.py — Zero-Trust MCP Gateway & Broker"]
-        MCPG["MCPZeroTrustGateway (JSON-RPC 2.0 /api/mcp/rpc)"]
-        ENV["HMAC-Signed MCPMediatedEnvelope (Zero Direct Model DB Access)"]
+    subgraph MCP["/apps/api/mcp_*.py — Zero-Trust MCP Gateway & Broker"]
+        MCPG["MCPZeroTrustGateway (JSON-RPC 2.0 /api/mcp/rpc, 4 Servers, 9 Tools)"]
+        ENV["HMAC-Signed MCPMediatedEnvelope + KMS/Token Redaction"]
     end
 
-    subgraph LocalLLM["/apps/api/llm_runtime.py — Sovereign Local LLM Runtime (0% Commercial Cloud)"]
-        OLLAMA["Ollama Default (qwen2.5:14b-instruct + nomic-embed-text)"]
+    subgraph LocalLLM["/apps/api/llm_*.py — Sovereign Local LLM Runtime (0% Commercial Cloud)"]
+        OLLAMA["Ollama Default (qwen2.5:14b-instruct + nomic-embed-text -> 1536-d)"]
         LITELLM["LiteLLM Local Proxy / vLLM / llama.cpp / LM Studio"]
     end
 
-    subgraph API["/apps/api — FastAPI + Instructor + python-pptx"]
-        FAPI["FastAPI Async REST & Webhook Gateway"]
-        RAG["Subgraph Co-Pilot (MCP-Mediated RAG)"]
-        PPTX["python-pptx Executive Deck Generator"]
+    subgraph API["/apps/api — Modular FastAPI Routers & Services"]
+        FAPI["main.py + routes_ingest_auth.py + routes_copilot_deliverables.py"]
+        RAG["Subgraph Co-Pilot (MCP-Mediated Structured JSON RAG)"]
+        PPTX["pptx_generator.py (.pptx) & Executive Brief (.md)"]
     end
 
-    subgraph Web["/apps/web — Next.js 15 + React 19 (3-Pane Advisory OS)"]
-        Left["Left Rail: Industry Switcher, Executive Pulse Heatmap, Variant Lens, Auth Vault"]
-        Center["Center Canvas: react-force-graph-2d + @xyflow/react Variant Diff Matrix"]
-        Right["Right Rail: Verbatim Citations, TipTap [[Wikilink]] Notes, Subgraph Co-Pilot"]
-        Modals["Header Modals: Zero-Trust MCP Inspector, Sovereign Local LLM Config, + Ingest Signal"]
-        Present["/present/[sessionId] Boardroom Dual-Window Mode"]
+    subgraph Web["/apps/web/src — Modular Next.js 15 + React 19 (3-Pane OS)"]
+        Panes["WorkspaceHeader + LeftRailSnapView + CenterWorkspacePane + RightRailInspector"]
+        Modals["Modals: MCP Gateway, Local LLM, Collector Scheduler, + Ingest Signal, Cypher/Math"]
+        Present["/present/[sessionId] Dual-Window BroadcastChannel Boardroom Mode"]
     end
 
     Sources --> TW
     Email --> FAPI
     TW <--> KMS
-    TW --> Cluster
-    Cluster --> PG
+    TW --> Cluster --> PG
     PG --- VEC
     PG --- AGE
     FAPI <--> PG
-    FAPI <--> REDIS
-    FAPI --> MCPG
-    MCPG <--> PG
-    MCPG --> ENV
-    ENV --> RAG
+    FAPI --> MCPG <--> PG
+    MCPG --> ENV --> RAG
     RAG <--> OLLAMA
     RAG <--> LITELLM
     FAPI --> PPTX
-    Web <--> FAPI
-    Center --> Present
+    Panes <--> FAPI
+    Modals <--> FAPI
+    Panes --> Present
 ```
 
 ---
 
 ## 2. Database Entity-Relationship Diagram (ERD)
+
+Full DDL and RLS policies live in [`packages/db/sql/init_extensions_and_rls.sql`](./packages/db/sql/init_extensions_and_rls.sql) and ORM definitions in [`packages/db/vectra_db/models.py`](./packages/db/vectra_db/models.py).
 
 ```mermaid
 erDiagram
@@ -80,47 +78,38 @@ erDiagram
         string owner_org_id
         string provider "x_oauth2 | inbound_email | substack_session | github"
         string account_handle
-        bytes encrypted_dek "KMS-wrapped Data Encryption Key"
+        bytes encrypted_dek "12B dek_iv + KEK-wrapped 256-bit DEK"
         bytes encryption_iv "12-byte GCM nonce"
-        bytes ciphertext "AES-256-GCM encrypted token/cookie payload"
+        bytes ciphertext "AES-256-GCM encrypted payload"
         bytes auth_tag "16-byte GCM authentication tag"
         string[] scopes
         string status "healthy | expiring_soon | expired"
-        timestamp expires_at
-        timestamp last_synced_at
     }
 
     CANONICAL_NODES {
         uuid id PK
         string slug UK
         string title
-        text summary_executive "C-Suite ROI, capital allocation, regulatory exposure"
-        text summary_technical "CTO architecture, p99 latency, VRAM/throughput specs"
-        text summary_contrarian "Skeptic failure modes, hidden TCO, vendor lock-in"
-        text claim_vendor "Vendor marketing benchmark / headline claim"
-        text claim_builder "Independent builder benchmark / field reality"
-        text claim_production "Audited F500 production proof & telemetry"
+        text summary_executive
+        text summary_technical
+        text summary_contrarian
+        text claim_vendor
+        text claim_builder
+        text claim_production
         string[] industry_verticals
         string maturity_stage "research | pilot | production_scale"
         float base_signal_score
-        float consultant_weight "Default 1.0 (0.5x to 5.0x)"
-        float adoption_velocity "0-100 heatmap X-axis"
-        float verified_roi_score "0-100 heatmap Y-axis"
+        float consultant_weight "0.5x to 5.0x"
         string visibility "global | org_private | user_private"
-        string owner_org_id
-        string owner_user_id
         vector_1536 embedding
-        timestamp created_at
-        timestamp updated_at
     }
 
     NODE_SOURCES {
         uuid id PK
         uuid node_id FK
-        string source_type "x_thread | newsletter | sec_filing | eng_blog | regulatory | github"
+        string source_type
         string source_name
-        string author_handle
-        int authority_tier "1 (Primary Filing/Prod Telemetry) | 2 (Verified Builder) | 3 (Commentary)"
+        int authority_tier "1 | 2 | 3"
         string direct_url
         text exact_quote
         string provenance_license "public | subscriber_licensed"
@@ -136,20 +125,15 @@ erDiagram
         string relation_type "ENABLES | CONFLICTS_WITH | REGULATES | CASE_STUDY_OF | REPLACES"
         float weight "0.5 to 5.0"
         boolean is_user_created
-        text consultant_note
         string visibility "global | org_private | user_private"
-        string owner_user_id
-        timestamp created_at
     }
 
     CONSULTANT_NOTES {
         uuid id PK
         uuid node_id FK
         string owner_user_id
-        string owner_org_id
-        text markdown_content "Contains [[Wikilinks]] parsed into associative_edges"
+        text markdown_content
         string[] extracted_wikilinks
-        timestamp updated_at
     }
 
     CANONICAL_NODES ||--o{ NODE_SOURCES : "evidenced_by"
@@ -160,38 +144,25 @@ erDiagram
 
 ---
 
-## 3. Multi-Tenant Row-Level Security (RLS) & Credential Vault
+## 3. Multi-Tenant Row-Level Security (RLS) & KMS Envelope Vault
 
-### 3.1 PostgreSQL 17 Row-Level Security Policies
-Every query executed by `/apps/api` sets tenant session context variables (`SET LOCAL app.current_user_id = 'erik'; SET LOCAL app.current_org_id = 'vectra-advisory';`):
-- **Global & Private Node Visibility Policy**:
-  ```sql
-  CREATE POLICY canonical_nodes_tenant_isolation ON canonical_nodes
-    FOR SELECT USING (
-      visibility = 'global'
-      OR (visibility = 'org_private' AND owner_org_id = current_setting('app.current_org_id', true))
-      OR (visibility = 'user_private' AND owner_user_id = current_setting('app.current_user_id', true))
-    );
-  ```
-- **Source Provenance Isolation Policy**:
-  Shared `global` canonical nodes can have both `global` (`public`) sources and `user_private` (`subscriber_licensed`) sources attached. The RLS policy on `node_sources` ensures Erik sees his private *Stratechery* / *Pragmatic Engineer* / private X Bookmark excerpts merged seamlessly onto global Canonical Nodes, while other tenants never see Erik's `user_private` rows.
-
-### 3.2 AES-256-GCM Envelope Encryption Vault
-1. **Master Key (KEK)**: Loaded in KMS abstraction (`VECTRA_KMS_MASTER_KEY`).
-2. **Per-Integration Data Encryption Key (DEK)**: 32-byte random key generated per integration row, encrypted with the KEK.
-3. **Token Ciphertext**: OAuth refresh tokens and session cookies are encrypted with the DEK using `AES-256-GCM` (12-byte IV + 16-byte authentication tag).
-4. **Decryption Boundary**: Only Temporal worker activities decrypt tokens in-memory during scheduled scraping or OAuth token refresh. The API layer never returns raw tokens to the client.
+1. **PostgreSQL 17 `ENABLE` + `FORCE ROW LEVEL SECURITY` ([`init_extensions_and_rls.sql`](./packages/db/sql/init_extensions_and_rls.sql))**:
+   - Scoped per transaction via `app.current_user_id` and `app.current_org_id` in [`session.py`](./packages/db/vectra_db/session.py), mirrored by `rls_visibility_filter()` on SQLite fallback.
+   - Allows `user_private` (`[Subscriber Licensed]`) sources to attach onto shared `global` Canonical Nodes without cross-tenant leakage.
+2. **AES-256-GCM Envelope Vault & HKDF ([`vault.py`](./packages/db/vectra_db/vault.py) & [`security.py`](./packages/db/vectra_db/security.py))**:
+   - Per-record 256-bit DEKs wrapped under `VECTRA_KMS_MASTER_KEY` + deterministic per-tenant `HKDF-SHA256` key derivation (`derive_tenant_kek_hkdf()`).
+   - Decrypted **only** inside worker memory (`decrypt_in_worker_memory()`).
 
 ---
 
-## 4. Canonical Clustering & Composite Score Mathematics
+## 4. Canonical Clustering & Composite Score Mathematics ([`scoring.py`](./packages/db/vectra_db/scoring.py))
 
-For every Canonical Node $i$ with connected sources $S_i$ visible to the current tenant and edges $E_i$:
+For each Canonical Node $i$ with visible sources $S_i$ and incident edges $E_i$:
 
-$$\text{Recency\_Decay}(s) = \exp\left(-\lambda \cdot \Delta t_{\text{days}}(s)\right), \quad \lambda = \frac{\ln(2)}{7}$$
+$$\text{Recency\_Decay}(s) = \exp\left(-\lambda \cdot \Delta t_{\text{days}}(s)\right), \quad \lambda = \frac{\ln(2)}{10.0}$$
 
-$$\text{Authority\_Multiplier}(s) = \begin{cases} 3.0 & \text{if Tier 1 (Primary Filing / Production Telemetry)} \\ 2.0 & \text{if Tier 2 (Verified Principal Architect / Newsletter)} \\ 1.0 & \text{if Tier 3 (Market Commentary)} \end{cases}$$
+$$\text{Authority\_Multiplier}(s) = \begin{cases} 3.0 & \text{Tier 1 (Primary Filing / Production Telemetry / Regulatory)} \\ 2.1 & \text{Tier 2 (Verified Principal Builder / Paid Newsletter)} \\ 1.2 & \text{Tier 3 (Secondary Market Commentary)} \end{cases}$$
 
-$$\text{Graph\_Centrality}(i) = \sum_{e \in E_i} w_e \cdot \alpha_{\text{rel}}(e)$$
+$$\text{Graph\_Centrality}(i) = \sum_{e \in E_i} w_e \cdot \alpha_{\text{rel}}(e), \quad \alpha_{\text{rel}} \in [3.5, 4.5]$$
 
-$$\text{Composite\_Score}(i) = \left( \sum_{s \in S_i} \left(\text{Authority\_Multiplier}(s) \times \text{Recency\_Decay}(s) \times 8.5\right) + \text{Graph\_Centrality}(i) \right) \times \text{Consultant\_Weight}_i$$
+$$\text{Composite\_Score}(i) = \operatorname{round}\!\left(\left(0.35 \cdot B_i + \sum_{s \in S_i} \text{Authority\_Multiplier}(s) \cdot \text{Recency\_Decay}(s) \cdot 9.5 + \text{Graph\_Centrality}(i)\right) \times \operatorname{clip}(W_i, 0.5, 5.0),\; 1\right)$$

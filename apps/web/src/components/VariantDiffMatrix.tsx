@@ -4,7 +4,6 @@ import React, { useMemo } from "react";
 import {
   ReactFlow,
   Background,
-  Controls,
   MarkerType,
   Node,
   Edge,
@@ -150,47 +149,47 @@ export default function VariantDiffMatrix({
           nodes={flowNodes}
           edges={flowEdges}
           fitView
+          fitViewOptions={{ padding: 0.18 }}
           proOptions={{ hideAttribution: true }}
         >
           <Background color="#1E293B" gap={18} />
-          <Controls showInteractive={false} />
         </ReactFlow>
       </div>
 
       {/* Synchronized Side-by-Side Variant Comparison Table */}
-      <div className="p-4 flex-1">
-        <div className="flex items-center justify-between mb-3">
+      <div className="p-3 flex-1">
+        <div className="flex items-center justify-between gap-2 mb-2.5">
           <div>
-            <h2 className="text-sm font-semibold text-slate-100 uppercase tracking-wider font-mono">
-              Synchronized Variant Diff Matrix — Vendor Claim vs. Builder Reality vs. Production Proof
+            <h2 className="text-xs font-semibold text-slate-100 uppercase tracking-wider font-mono">
+              Synchronized Variant Diff Matrix — Claim vs. Reality vs. Proof
             </h2>
-            <p className="text-xs text-slate-400">
-              Click any row to focus node on graph or click inline provenance pills to inspect verbatim primary quotes.
+            <p className="text-[11px] text-slate-400">
+              Click any row to focus node or click provenance pills to inspect primary quotes.
             </p>
           </div>
-          <span className="px-2.5 py-1 rounded bg-slate-900 border border-slate-700 font-mono text-xs text-sky-400">
-            Active Lens: {variantLens.toUpperCase()}
+          <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 font-mono text-[10px] text-sky-400 shrink-0">
+            Lens: {variantLens.toUpperCase()}
           </span>
         </div>
 
-        <div className="overflow-x-auto border border-slate-800 rounded-md">
-          <table className="w-full text-left border-collapse text-xs">
+        <div className="border border-slate-800 rounded-md overflow-hidden">
+          <table className="w-full table-fixed text-left border-collapse text-[11px]">
             <thead>
-              <tr className="bg-[#101722] border-b border-slate-800 text-[11px] font-mono uppercase text-slate-400">
-                <th className="p-3 w-[20%]">Canonical Node & Score</th>
-                <th className="p-3 w-[23%] text-amber-400">
+              <tr className="bg-[#101722] border-b border-slate-800 text-[10px] font-mono uppercase text-slate-400">
+                <th className="p-2.5 w-[21%]">Node & Score</th>
+                <th className="p-2.5 w-[24%] text-amber-400">
                   <span className="inline-flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5" /> Vendor Marketing Claim
+                    <Sparkles className="w-3 h-3 shrink-0" /> Vendor Claim
                   </span>
                 </th>
-                <th className="p-3 w-[26%] text-rose-400">
+                <th className="p-2.5 w-[26%] text-rose-400">
                   <span className="inline-flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" /> Independent Builder Reality
+                    <AlertTriangle className="w-3 h-3 shrink-0" /> Builder Reality
                   </span>
                 </th>
-                <th className="p-3 w-[31%] text-emerald-400">
+                <th className="p-2.5 w-[29%] text-emerald-400">
                   <span className="inline-flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Enterprise Production Proof & Citations
+                    <ShieldCheck className="w-3 h-3 shrink-0" /> Production Proof
                   </span>
                 </th>
               </tr>

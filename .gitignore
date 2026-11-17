@@ -26,8 +26,9 @@ dist/
 .env.*
 !.env.example
 
-# OS / IDE / Archives
+# OS / IDE / Archives / Disabled Cloud CI
 .DS_Store
 *.pem
 *.log
 *.tar.gz
+.github/workflows/
