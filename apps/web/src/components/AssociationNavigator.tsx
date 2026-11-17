@@ -41,12 +41,28 @@ const RELATION_BADGE_STYLE: Record<RelationType, string> = {
   REPLACES: "bg-slate-700/60 text-slate-200 border-slate-600",
 };
 
-const RELATION_OPTIONS: RelationType[] = [
-  "ENABLES",
-  "CASE_STUDY_OF",
-  "REGULATES",
-  "CONFLICTS_WITH",
-  "REPLACES",
+const OUTGOING_LABEL: Record<RelationType, string> = {
+  ENABLES: "Enables →",
+  CASE_STUDY_OF: "Case Study Of →",
+  REGULATES: "Regulates →",
+  CONFLICTS_WITH: "Conflicts With →",
+  REPLACES: "Replaces →",
+};
+
+const INCOMING_LABEL: Record<RelationType, string> = {
+  ENABLES: "← Enabled By",
+  CASE_STUDY_OF: "← Case Study",
+  REGULATES: "← Regulated By",
+  CONFLICTS_WITH: "← Conflicts With",
+  REPLACES: "← Replaced By",
+};
+
+const RELATION_OPTIONS: { value: RelationType; label: string }[] = [
+  { value: "ENABLES", label: "Enables" },
+  { value: "CASE_STUDY_OF", label: "Case Study Of" },
+  { value: "REGULATES", label: "Regulates" },
+  { value: "CONFLICTS_WITH", label: "Conflicts With" },
+  { value: "REPLACES", label: "Replaces" },
 ];
 
 export default function AssociationNavigator({
@@ -98,30 +114,34 @@ export default function AssociationNavigator({
   const renderAssocCard = (assoc: ResolvedAssociation) => {
     const { edge, peerNode, direction, sharedVerticals } = assoc;
     const isLassoed = lassoNodeIds.includes(peerNode.id);
+    const badgeLabel =
+      direction === "outgoing"
+        ? OUTGOING_LABEL[edge.relation_type]
+        : INCOMING_LABEL[edge.relation_type];
+
     return (
       <div
         key={edge.id}
         id={`assoc-card-${edge.id}`}
-        className="bg-[#090D14] border border-slate-800 hover:border-slate-700 rounded p-2.5 space-y-2 transition"
+        className="bg-[#090D14] border border-slate-800 hover:border-slate-700 rounded-md p-2.5 space-y-2 transition"
       >
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1.5">
             <span
-              className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border font-semibold ${
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
                 RELATION_BADGE_STYLE[edge.relation_type]
               }`}
             >
-              {direction === "outgoing" ? `──[${edge.relation_type}]──▶` : `◀──[${edge.relation_type}]──`}
+              {badgeLabel}
             </span>
             {edge.is_user_created && (
-              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
-                <Link2 className="w-2.5 h-2.5" /> [[Wikilink]]
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/35 flex items-center gap-1">
+                <Link2 className="w-2.5 h-2.5" /> Field Note
               </span>
             )}
           </div>
-          <span className="text-[10px] font-mono text-slate-400">
-            w={edge.weight.toFixed(1)} • Score{" "}
-            <strong className="text-sky-300">{peerNode.composite_score}</strong>
+          <span className="text-[11px] font-mono text-slate-400">
+            Score <strong className="text-sky-300">{peerNode.composite_score}</strong>
           </span>
         </div>
 
@@ -131,17 +151,16 @@ export default function AssociationNavigator({
           onClick={() => onSelectNode(peerNode.id)}
           className="w-full text-left group flex items-start justify-between gap-2"
         >
-          <span className="text-xs font-semibold text-slate-100 group-hover:text-sky-300 leading-snug transition">
+          <span className="text-[12.5px] font-semibold text-slate-100 group-hover:text-sky-300 leading-snug transition">
             {peerNode.title}
           </span>
           <ArrowUpRight className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5 group-hover:translate-x-0.5 transition" />
         </button>
 
-        {/* Verbatim Association Rationale (Why these two nodes are linked) */}
         {edge.consultant_note && (
-          <div className="text-[11px] text-slate-300 bg-[#101722] border-l-2 border-sky-500/60 pl-2.5 py-1.5 pr-2 rounded-r leading-relaxed">
-            <span className="font-mono text-[9px] uppercase text-slate-400 block mb-0.5">
-              Association Rationale:
+          <div className="text-[11.5px] text-slate-300 bg-[#101722] border-l-2 border-sky-500/60 pl-2.5 py-1.5 pr-2 rounded-r leading-relaxed">
+            <span className="text-[10px] font-medium text-slate-400 block mb-0.5">
+              Why connected:
             </span>
             {edge.consultant_note}
           </div>
@@ -152,22 +171,22 @@ export default function AssociationNavigator({
             {sharedVerticals.slice(0, 2).map((vert) => (
               <span
                 key={vert}
-                className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800/90 text-slate-300"
+                className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-300"
               >
-                Shared: {vert}
+                {vert}
               </span>
             ))}
           </div>
           <button
             type="button"
             onClick={() => onToggleLassoNode(peerNode.id)}
-            className={`text-[10px] font-mono px-2 py-0.5 rounded border transition shrink-0 ${
+            className={`text-[10px] font-medium px-2 py-0.5 rounded border transition shrink-0 ${
               isLassoed
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
+                ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
                 : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
             }`}
           >
-            {isLassoed ? "✓ In Co-Pilot" : "+ Scope"}
+            {isLassoed ? "✓ In Brief" : "+ Add to Brief"}
           </button>
         </div>
       </div>
@@ -177,12 +196,12 @@ export default function AssociationNavigator({
   return (
     <div id="data-association-navigator" className="flex flex-col gap-3">
       {/* Top Neighborhood Action Bar */}
-      <div className="bg-[#101722] border border-slate-800 rounded p-2.5 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[11px] font-mono text-slate-300 flex items-center gap-1.5">
+      <div className="bg-[#101722] border border-slate-800 rounded-md p-2.5 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs text-slate-300 flex items-center gap-1.5">
           <GitBranch className="w-3.5 h-3.5 text-sky-400" />
           <span>
-            <strong>{outgoing.length + incoming.length}</strong> Typed Links (
-            {neighborIds.length} Connected Nodes)
+            <strong>{outgoing.length + incoming.length}</strong> connections across{" "}
+            <strong>{neighborIds.length}</strong> related topics
           </span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -190,20 +209,20 @@ export default function AssociationNavigator({
             id="scope-1hop-neighborhood-btn"
             type="button"
             onClick={() => onScopeNeighborhood(activeNode.id)}
-            className="px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-[10px] font-mono uppercase font-semibold flex items-center gap-1 transition"
-            title="Lasso this node and all its 1-hop associated neighbors into Subgraph Co-Pilot"
+            className="px-2.5 py-1 rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-[11px] font-medium flex items-center gap-1 transition"
+            title="Send this topic and all connected neighbors to the AI Brief"
           >
             <Lasso className="w-3 h-3" />
-            <span>Lasso 1-Hop ({neighborIds.length + 1})</span>
+            <span>Brief Group ({neighborIds.length + 1})</span>
           </button>
           <button
             id="toggle-inline-edge-creator-btn"
             type="button"
             onClick={() => setShowAddForm((v) => !v)}
-            className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-300 text-[10px] font-mono uppercase font-semibold flex items-center gap-1 transition"
+            className="px-2.5 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-300 text-[11px] font-medium flex items-center gap-1 transition"
           >
             <Plus className="w-3 h-3" />
-            <span>Link</span>
+            <span>Connect</span>
           </button>
         </div>
       </div>
@@ -212,27 +231,27 @@ export default function AssociationNavigator({
       {showAddForm && otherNodes.length > 0 && (
         <form
           onSubmit={handleSubmitEdge}
-          className="bg-[#101722] border border-sky-500/40 rounded p-2.5 space-y-2 text-xs"
+          className="bg-[#101722] border border-sky-500/40 rounded-md p-3 space-y-2 text-xs"
         >
-          <div className="text-[10px] font-mono uppercase text-sky-300 font-semibold">
-            Create Directed Association from &ldquo;{activeNode.title.slice(0, 32)}…&rdquo;
+          <div className="text-[11px] text-sky-300 font-semibold">
+            Connect “{activeNode.title.slice(0, 36)}…” to another topic
           </div>
           <div className="grid grid-cols-3 gap-1.5">
             <select
               value={relType}
               onChange={(e) => setRelType(e.target.value as RelationType)}
-              className="bg-[#090D14] border border-slate-700 rounded px-2 py-1 text-[11px] font-mono text-slate-100"
+              className="bg-[#090D14] border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-100"
             >
               {RELATION_OPTIONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
+                <option key={r.value} value={r.value}>
+                  {r.label}
                 </option>
               ))}
             </select>
             <select
               value={targetId || otherNodes[0]?.id || ""}
               onChange={(e) => setTargetId(e.target.value)}
-              className="col-span-2 bg-[#090D14] border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-100"
+              className="col-span-2 bg-[#090D14] border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-100"
             >
               {otherNodes.map((n) => (
                 <option key={n.id} value={n.id}>
@@ -245,21 +264,21 @@ export default function AssociationNavigator({
             type="text"
             value={rationale}
             onChange={(e) => setRationale(e.target.value)}
-            placeholder="Why are these nodes associated? (e.g. Sub-190ms SLA depends on KV-cache routing)"
-            className="w-full bg-[#090D14] border border-slate-700 rounded px-2 py-1 text-xs text-slate-100"
+            placeholder="Why are these connected? (e.g. Low-latency KYC depends on KV-cache routing)"
+            className="w-full bg-[#090D14] border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100"
           />
           <div className="flex justify-end gap-1.5">
             <button
               type="button"
               onClick={() => setShowAddForm(false)}
-              className="px-2 py-1 rounded bg-slate-800 text-[10px] font-mono text-slate-300"
+              className="px-2.5 py-1 rounded bg-slate-800 text-[11px] text-slate-300"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={creating}
-              className="px-2.5 py-1 rounded bg-sky-500 text-slate-950 font-bold text-[10px] font-mono uppercase"
+              className="px-3 py-1 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-[11px]"
             >
               {creating ? "Saving..." : "Save Association"}
             </button>
@@ -268,16 +287,16 @@ export default function AssociationNavigator({
       )}
 
       {/* Outgoing Impacts */}
-      <div className="bg-[#101722] border border-slate-800 rounded p-2.5 space-y-2">
-        <div className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 flex items-center justify-between">
-          <span className="flex items-center gap-1">
-            <ArrowRight className="w-3 h-3" /> Outgoing Impacts (This Node Drives / Regulates)
+      <div className="bg-[#101722] border border-slate-800 rounded-md p-2.5 space-y-2">
+        <div className="text-[11px] font-semibold text-emerald-400 flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <ArrowRight className="w-3.5 h-3.5" /> What This Topic Drives or Regulates
           </span>
-          <span>{outgoing.length}</span>
+          <span className="font-mono text-slate-400">{outgoing.length}</span>
         </div>
         {outgoing.length === 0 ? (
-          <div className="text-[11px] text-slate-500 font-mono py-1">
-            No outgoing {relationFilter !== "ALL" ? relationFilter : ""} associations on current view.
+          <div className="text-xs text-slate-500 py-1">
+            No outgoing connections match the current filter.
           </div>
         ) : (
           <div className="space-y-2">{outgoing.map(renderAssocCard)}</div>
@@ -285,16 +304,16 @@ export default function AssociationNavigator({
       </div>
 
       {/* Incoming Drivers & Constraints */}
-      <div className="bg-[#101722] border border-slate-800 rounded p-2.5 space-y-2">
-        <div className="text-[10px] font-mono uppercase tracking-wider text-sky-400 flex items-center justify-between">
-          <span className="flex items-center gap-1">
-            <ArrowRight className="w-3 h-3" /> Upstream Drivers & Governance Constraints
+      <div className="bg-[#101722] border border-slate-800 rounded-md p-2.5 space-y-2">
+        <div className="text-[11px] font-semibold text-sky-400 flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <ArrowRight className="w-3.5 h-3.5" /> Upstream Enablers & Regulatory Guardrails
           </span>
-          <span>{incoming.length}</span>
+          <span className="font-mono text-slate-400">{incoming.length}</span>
         </div>
         {incoming.length === 0 ? (
-          <div className="text-[11px] text-slate-500 font-mono py-1">
-            No incoming {relationFilter !== "ALL" ? relationFilter : ""} associations on current view.
+          <div className="text-xs text-slate-500 py-1">
+            No incoming connections match the current filter.
           </div>
         ) : (
           <div className="space-y-2">{incoming.map(renderAssocCard)}</div>

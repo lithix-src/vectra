@@ -54,7 +54,7 @@ export default function VectraAdvisoryWorkspace() {
       {ws.statusToast && (
         <div
           id="vectra-status-toast"
-          className="fixed bottom-4 right-4 z-50 bg-[#101722] border border-sky-400/60 text-sky-200 px-3.5 py-2 rounded shadow-2xl text-xs font-mono flex items-center gap-2"
+          className="fixed bottom-4 right-4 z-50 bg-[#101722] border border-sky-400/60 text-sky-200 px-3.5 py-2 rounded shadow-2xl text-xs font-medium flex items-center gap-2"
         >
           <Sparkles className="w-4 h-4 text-sky-400 shrink-0" />
           <span>{ws.statusToast}</span>
@@ -101,7 +101,6 @@ export default function VectraAdvisoryWorkspace() {
           lassoModeActive={ws.lassoModeActive}
           lassoNodeIds={ws.lassoNodeIds}
           connectModeSourceId={ws.connectModeSourceId}
-          weightSliderValue={ws.weightSliderValue}
           onSetCenterMode={ws.setCenterMode}
           onSetRelationFilter={ws.setRelationFilter}
           onToggleLassoMode={() => {
@@ -109,7 +108,7 @@ export default function VectraAdvisoryWorkspace() {
             ws.setLassoModeActive(nextState);
             if (nextState) {
               ws.triggerToast(
-                "Lasso Mode ON: Drag a rectangle on the graph (or click Top 4) to scope subgraph"
+                "Selection Mode ON: Drag a rectangle on the map (or click Top 4) to select topics for an AI Brief"
               );
             }
           }}
@@ -122,11 +121,10 @@ export default function VectraAdvisoryWorkspace() {
             } else {
               ws.setConnectModeSourceId(ws.selectedNode.id);
               ws.triggerToast(
-                `Click any target node on the graph to link from "${ws.selectedNode.title.slice(0, 24)}…"`
+                `Click another topic on the map to connect from "${ws.selectedNode.title.slice(0, 26)}…"`
               );
             }
           }}
-          onWeightCommit={ws.handleWeightCommit}
           onSelectNode={ws.setSelectedNodeId}
           onUpdateLassoNodes={ws.handleUpdateLassoNodes}
           onCreateEdgeBetween={ws.handleCreateEdgeBetween}
@@ -144,6 +142,7 @@ export default function VectraAdvisoryWorkspace() {
           contextQuery={ws.contextQuery}
           relationFilter={ws.relationFilter}
           lassoNodeIds={ws.lassoNodeIds}
+          weightSliderValue={ws.weightSliderValue}
           llmStatus={ws.llmStatus}
           copilotQuestion={ws.copilotQuestion}
           copilotLoading={ws.copilotLoading}
@@ -153,6 +152,7 @@ export default function VectraAdvisoryWorkspace() {
           onSelectNode={ws.setSelectedNodeId}
           onSetRightTab={ws.setRightTab}
           onSetCopilotQuestion={ws.setCopilotQuestion}
+          onWeightCommit={ws.handleWeightCommit}
           onSaveNote={ws.handleSaveNoteAndSyncWikilinks}
           onScopeNeighborhood={ws.handleScopeNeighborhood}
           onToggleLassoNode={ws.handleToggleLassoNode}

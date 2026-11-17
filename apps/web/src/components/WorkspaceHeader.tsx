@@ -7,6 +7,7 @@ import {
   Clock,
   Cpu,
   Download,
+  Lock,
   PlusCircle,
   Presentation,
   Search,
@@ -50,114 +51,129 @@ export default function WorkspaceHeader({
   const enabledPacks = collectorStatus.packs.filter((p) => p.schedule.enabled).length;
 
   return (
-    <header className="h-13 py-1.5 shrink-0 border-b border-slate-800 bg-[#0D131F] px-3.5 flex items-center justify-between gap-3">
-      {/* Brand & Security Context */}
+    <header className="h-13 py-1.5 shrink-0 border-b border-slate-800 bg-[#0D131F] px-3.5 flex items-center justify-between gap-2.5">
+      {/* Brand & Tenant Badge */}
       <div className="flex items-center gap-2.5 shrink-0">
         <div className="w-7 h-7 rounded bg-sky-500/15 border border-sky-400/50 flex items-center justify-center font-mono font-bold text-sky-400 text-xs">
           V
         </div>
-        <div className="flex items-center gap-1.5">
-          <h1 className="text-sm font-bold tracking-wider uppercase font-mono text-slate-100">
-            VECTRA
-          </h1>
-          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hidden md:inline">
-            RLS: erik@vectra-advisory
+        <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-sm font-bold tracking-wide text-slate-100 leading-none">
+              VECTRA
+            </h1>
+            <span className="text-[10px] text-slate-400 hidden xl:block leading-tight mt-0.5">
+              AI Advisory Intelligence
+            </span>
+          </div>
+          <span
+            className="text-[10px] font-medium px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/25 hidden lg:inline-flex items-center gap-1"
+            title="Multi-Tenant Row-Level Security Active (erik@vectra-advisory)"
+          >
+            <Lock className="w-2.5 h-2.5" />
+            <span>Erik • Private</span>
           </span>
         </div>
       </div>
 
-      {/* Persistent Variant Lens Switcher */}
-      <div
-        id="variant-lens-toggle-group"
-        className="flex items-center bg-[#090D14] p-0.5 rounded-md border border-slate-800 shrink-0"
-      >
-        <button
-          id="lens-btn-c_suite"
-          type="button"
-          onClick={() =>
-            onSelectLens("c_suite", "Switched Variant Lens: C-Suite (ROI, Capital & Regulatory Risk)")
-          }
-          className={`px-2.5 py-1 rounded text-[11px] font-mono uppercase transition flex items-center gap-1.5 ${
-            variantLens === "c_suite"
-              ? "bg-sky-500 text-slate-950 font-bold"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
+      {/* Labeled Perspective Lens Switcher */}
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="text-[11px] font-medium text-slate-400 hidden md:inline">
+          Perspective:
+        </span>
+        <div
+          id="variant-lens-toggle-group"
+          className="flex items-center bg-[#090D14] p-0.5 rounded-md border border-slate-800"
         >
-          <Briefcase className="w-3 h-3" />
-          C-Suite
-        </button>
-        <button
-          id="lens-btn-cto"
-          type="button"
-          onClick={() =>
-            onSelectLens("cto", "Switched Variant Lens: CTO / Principal Architect (Latency & Topology)")
-          }
-          className={`px-2.5 py-1 rounded text-[11px] font-mono uppercase transition flex items-center gap-1.5 ${
-            variantLens === "cto"
-              ? "bg-emerald-500 text-slate-950 font-bold"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Cpu className="w-3 h-3" />
-          CTO
-        </button>
-        <button
-          id="lens-btn-contrarian"
-          type="button"
-          onClick={() =>
-            onSelectLens("contrarian", "Switched Variant Lens: Contrarian / Skeptic (Failure Modes & TCO)")
-          }
-          className={`px-2.5 py-1 rounded text-[11px] font-mono uppercase transition flex items-center gap-1.5 ${
-            variantLens === "contrarian"
-              ? "bg-rose-500 text-slate-950 font-bold"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <AlertTriangle className="w-3 h-3" />
-          Contrarian
-        </button>
+          <button
+            id="lens-btn-c_suite"
+            type="button"
+            title="Executive Lens: ROI, Capital Allocation & Regulatory Audit"
+            onClick={() =>
+              onSelectLens("c_suite", "Perspective: Executive (ROI, Capital & Regulatory Risk)")
+            }
+            className={`px-2.5 py-1 rounded text-[11px] font-medium transition flex items-center gap-1.5 ${
+              variantLens === "c_suite"
+                ? "bg-sky-500 text-slate-950 font-semibold"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Briefcase className="w-3 h-3" />
+            <span>Executive</span>
+          </button>
+          <button
+            id="lens-btn-cto"
+            type="button"
+            title="Architect Lens: Systems, p99 Latency & Data Topology"
+            onClick={() =>
+              onSelectLens("cto", "Perspective: Architect (Latency, KV-Cache & Data Topology)")
+            }
+            className={`px-2.5 py-1 rounded text-[11px] font-medium transition flex items-center gap-1.5 ${
+              variantLens === "cto"
+                ? "bg-emerald-500 text-slate-950 font-semibold"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Cpu className="w-3 h-3" />
+            <span>Architect</span>
+          </button>
+          <button
+            id="lens-btn-contrarian"
+            type="button"
+            title="Skeptic Lens: Vendor Hype vs. Production Failure Modes"
+            onClick={() =>
+              onSelectLens("contrarian", "Perspective: Skeptic (Failure Modes & Hidden TCO)")
+            }
+            className={`px-2.5 py-1 rounded text-[11px] font-medium transition flex items-center gap-1.5 ${
+              variantLens === "contrarian"
+                ? "bg-rose-500 text-slate-950 font-semibold"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <AlertTriangle className="w-3 h-3" />
+            <span>Skeptic</span>
+          </button>
+        </div>
       </div>
 
-      {/* Compact Runtime & Action Clusters (Zero Horizontal Crowding) */}
+      {/* System Status & Primary Actions */}
       <div className="flex items-center gap-1.5 min-w-0">
         <div className="flex items-center bg-[#090D14] p-0.5 rounded border border-slate-800 gap-0.5">
           <button
             id="open-mcp-gateway-modal-btn"
             type="button"
             onClick={onOpenMCPModal}
-            className="px-2 py-1 rounded hover:bg-sky-500/20 text-sky-300 text-[11px] font-mono flex items-center gap-1 transition"
-            title="Zero-Trust MCP Gateway, Scoped Servers & Audit Log"
+            className="px-2 py-1 rounded hover:bg-slate-800 text-slate-300 hover:text-sky-300 text-[11px] font-medium flex items-center gap-1 transition"
+            title="Zero-Trust MCP Security Gateway & Tool Audit"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden lg:inline">MCP</span>
+            <span className="hidden xl:inline">MCP</span>
           </button>
 
           <button
             id="open-local-llm-modal-btn"
             type="button"
             onClick={onOpenLLMModal}
-            className="px-2 py-1 rounded hover:bg-emerald-500/20 text-emerald-300 text-[11px] font-mono flex items-center gap-1.5 transition"
-            title={`Sovereign Local LLM (${llmStatus.provider}: ${llmStatus.model})`}
+            className="px-2 py-1 rounded hover:bg-slate-800 text-slate-200 text-[11px] font-mono flex items-center gap-1.5 transition"
+            title={`Local AI Engine (${llmStatus.provider}: ${llmStatus.model})`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                 llmStatus.daemon_online ? "bg-emerald-400" : "bg-amber-400"
               }`}
             />
-            <span className="truncate max-w-[105px]">{llmStatus.model}</span>
+            <span className="truncate max-w-[96px]">{llmStatus.model}</span>
           </button>
 
           <button
             id="open-collector-scheduler-modal-btn"
             type="button"
             onClick={onOpenCollectorModal}
-            className="px-2 py-1 rounded hover:bg-amber-500/20 text-amber-300 text-[11px] font-mono flex items-center gap-1 transition"
-            title="Enterprise RSS/Atom & SEC EDGAR Collector Pack Schedules"
+            className="px-2 py-1 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-300 text-[11px] font-medium flex items-center gap-1 transition"
+            title="Automated Data Feed Collectors (Fortune 500, SEC 8-K, NIST/EU AI Act)"
           >
             <Clock className="w-3.5 h-3.5 text-amber-400" />
-            <span>
-              {enabledPacks}/{collectorStatus.packs.length}
-            </span>
+            <span>Feeds ({enabledPacks})</span>
           </button>
         </div>
 
@@ -165,8 +181,8 @@ export default function WorkspaceHeader({
           id="open-cmdk-palette-btn"
           type="button"
           onClick={onOpenCmdk}
-          className="px-2 py-1.5 rounded bg-[#090D14] hover:bg-slate-800 border border-slate-700 text-[11px] font-mono text-slate-300 flex items-center gap-1.5 shrink-0"
-          title="Command Palette (⌘K)"
+          className="px-2 py-1.5 rounded bg-[#090D14] hover:bg-slate-800 border border-slate-700 text-[11px] font-mono text-slate-300 flex items-center gap-1 shrink-0"
+          title="Quick Jump & Commands (⌘K)"
         >
           <Search className="w-3.5 h-3.5 text-sky-400" />
           <kbd className="text-[10px] text-slate-400">⌘K</kbd>
@@ -176,20 +192,21 @@ export default function WorkspaceHeader({
           id="open-ingest-signal-modal-btn"
           type="button"
           onClick={onOpenIngestModal}
-          className="px-2.5 py-1.5 rounded bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/50 text-sky-300 font-semibold text-[11px] font-mono flex items-center gap-1 transition shrink-0"
+          className="px-2.5 py-1.5 rounded bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/50 text-sky-200 font-medium text-[11px] whitespace-nowrap flex items-center gap-1 transition shrink-0"
         >
           <PlusCircle className="w-3.5 h-3.5 text-sky-400" />
-          <span>Ingest</span>
+          <span>Add Signal</span>
         </button>
 
         <button
           id="launch-boardroom-mode-btn"
           type="button"
           onClick={onLaunchBoardroom}
-          className="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-[11px] font-mono text-slate-100 flex items-center gap-1 transition shrink-0"
+          className="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-medium whitespace-nowrap text-slate-100 flex items-center gap-1 transition shrink-0"
+          title="Launch Dual-Screen Boardroom Presenter Mode"
         >
           <Presentation className="w-3.5 h-3.5 text-sky-400" />
-          <span className="hidden xl:inline">Boardroom</span>
+          <span>Present</span>
         </button>
 
         <button
@@ -197,10 +214,11 @@ export default function WorkspaceHeader({
           type="button"
           disabled={pptxDownloading}
           onClick={onDownloadPptx}
-          className="px-2.5 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-[11px] font-mono flex items-center gap-1 transition shrink-0"
+          className="px-2.5 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-[11px] whitespace-nowrap flex items-center gap-1 transition shrink-0"
+          title="Download 5-Slide Executive PowerPoint (.pptx)"
         >
           <Download className="w-3.5 h-3.5" />
-          <span>{pptxDownloading ? "..." : ".pptx"}</span>
+          <span>{pptxDownloading ? "..." : "Slides"}</span>
         </button>
       </div>
     </header>

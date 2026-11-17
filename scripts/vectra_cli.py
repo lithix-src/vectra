@@ -318,7 +318,7 @@ def cmd_dev() -> int:
     env["NEXT_PUBLIC_API_URL"] = f"http://127.0.0.1:{api_port}"
     print(f"[vectra-cli] Starting FastAPI (:{api_port}) and Next.js 15 Advisory OS (:{web_port})...")
     api_proc = subprocess.Popen(
-        [_venv_python(), "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", str(api_port)],
+        [_venv_python(), "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", str(api_port), "--reload"],
         cwd=str(ROOT_DIR / "apps" / "api"),
         env=env,
     )

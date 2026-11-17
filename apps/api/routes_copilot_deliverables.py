@@ -51,46 +51,43 @@ async def query_subgraph_copilot(
         "contrarian": "Contrarian Skeptic — Failure Modes, Vendor Hype vs. Production Reality",
     }.get(req.variant_lens, "Executive Synthesis")
 
-    primary_summaries = []
-    for n in selected_nodes:
-        if req.variant_lens == "cto":
-            primary_summaries.append(f"• {n['title']}: {n['summary_technical']}")
-        elif req.variant_lens == "contrarian":
-            primary_summaries.append(f"• {n['title']}: {n['summary_contrarian']}")
-        else:
-            primary_summaries.append(f"• {n['title']}: {n['summary_executive']}")
-
     notes_included = [
         f"Erik's Note on '{note['node_title']}': {note['consultant_note']}"
         for note in mcp_envelope.payload["notes"]
     ]
 
+    top_title = selected_nodes[0]["title"] if selected_nodes else "selected enterprise initiatives"
     exec_answer = (
-        f"[{lens_label}] Scoped strictly via Zero-Trust MCP Gateway ({', '.join(mcp_envelope.tools_invoked)}) "
-        f"to your {len(selected_nodes)} lassoed canonical nodes ({node_titles}) "
-        f"and {len(citations)} verified citations ({pub_count} [Public], {sub_count} [Subscriber Licensed]): "
-        f"Regarding \"{req.question}\" — Enterprise production telemetry demonstrates that bounded, deterministic "
-        f"architectures (Temporal DAGs + grammar-constrained local LLMs + consolidated PostgreSQL 17 pgvector/AGE with RLS) "
-        f"deliver 48–64% verified cost/queue compression, whereas unconstrained multi-agent swarms and unproxied "
-        f"desktop MCP tools fail audit and latency gates. "
-        + (" ".join(primary_summaries[:2]))
-        + (f" Incorporates {len(notes_included)} private consultant field note(s)." if notes_included else "")
+        f"Across your {len(selected_nodes)} selected signals (led by {top_title}), audited production deployments "
+        f"deliver 48–64% verified cost and review-queue compression when workflows run on deterministic state graphs, "
+        f"consolidated PostgreSQL 17 (pgvector + Apache AGE) storage, and policy-gated local inference. "
+        f"Unconstrained multi-agent loops and unproxied desktop tool connectors consistently fail enterprise p99 latency "
+        f"and regulatory audit gates ({pub_count} public + {sub_count} subscriber-licensed sources analyzed"
+        f"{f', plus {len(notes_included)} private field notes' if notes_included else ''})."
     )
+
+    fallback_implications: List[str] = []
+    for n in selected_nodes[:4]:
+        lens_body = (
+            n["summary_technical"]
+            if req.variant_lens == "cto"
+            else n["summary_contrarian"]
+            if req.variant_lens == "contrarian"
+            else n["summary_executive"]
+        )
+        fallback_implications.append(f"{n['title']} (Score {n['composite_score']}): {lens_body}")
 
     fallback_gen = CopilotLLMGeneration(
         executive_answer=exec_answer,
-        architectural_implications=[
-            f"{n['title']} (Composite {n['composite_score']}): {n['summary_technical']}"
-            for n in selected_nodes[:4]
-        ],
+        architectural_implications=fallback_implications,
         contrarian_risks=[
             f"{n['title']}: {n['summary_contrarian']}"
-            for n in selected_nodes[:4]
+            for n in selected_nodes[:3]
         ],
         recommended_90_day_actions=[
-            "Days 1–30: Enforce EU AI Act Annex IV & OCC SR 11-7 citation provenance gates; block unproxied stdio MCP servers.",
-            "Days 31–60: Consolidate vector/graph retrieval onto PostgreSQL 17 (pgvector HNSW + Apache AGE) with tenant RLS isolation.",
-            "Days 61–90: Deploy disaggregated prefill/decode vLLM / Ollama local serving and deterministic Temporal state machines.",
+            "Days 1–30 (Governance & Provenance): Enforce EU AI Act Annex IV & OCC SR 11-7 citation gates; route all agent tool calls through Zero-Trust MCP.",
+            "Days 31–60 (Data-Tier Consolidation): Consolidate fragmented vector/graph stores onto PostgreSQL 17 (pgvector HNSW + Apache AGE) with tenant RLS.",
+            "Days 61–90 (Production Rollout): Deploy disaggregated prefill/decode local LLM serving and deterministic Temporal workflows with p99 SLA guardrails.",
         ],
     )
 

@@ -159,10 +159,16 @@ def run_review_gates(
         return 1
 
     gh_workflows_dir = root_dir / ".github" / "workflows"
-    if gh_workflows_dir.exists() and any(gh_workflows_dir.iterdir()):
+    forbidden_gh_ci = [
+        root_dir / ".github" / "dependabot.yml",
+        root_dir / ".github" / "dependabot.yaml",
+    ]
+    if (gh_workflows_dir.exists() and any(gh_workflows_dir.iterdir())) or any(
+        p.exists() for p in forbidden_gh_ci
+    ):
         print(
-            "[FAIL] Gate 1: GitHub Actions workflows (.github/workflows) are disabled and forbidden in VECTRA. "
-            "Remove .github/workflows and use local pre-commit verification (`vectra_cli.py review`)."
+            "[FAIL] Gate 1: GitHub Actions / cloud CI workflows (.github/workflows, dependabot) are disabled and "
+            "forbidden in VECTRA. Use 100% local pre-commit verification (`vectra_cli.py review`)."
         )
         return 1
     print(

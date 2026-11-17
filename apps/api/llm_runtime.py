@@ -29,6 +29,33 @@ from llm_policy import (
 from vectra_db import EMBEDDING_DIM, deterministic_embedding_1536
 
 
+_PREFERRED_OLLAMA_CHAT_MODELS = (
+    "qwen2.5:14b-instruct",
+    "llama3.1:8b",
+    "qwen2.5-coder:7b-instruct",
+    "qwen2.5-coder:14b",
+    "llama3.2:3b",
+    "qwen3:8b",
+    "qwen3:14b",
+)
+
+
+def _pick_installed_ollama_chat_model(requested: str, installed: List[str]) -> str:
+    """Return `requested` if installed in Ollama, else select the fastest capable installed chat model."""
+    if not installed or requested in installed:
+        return requested
+    chat_candidates = [
+        m for m in installed if not any(tok in m.lower() for tok in ("embed", "nomic", "bge", "mxbai"))
+    ]
+    if not chat_candidates:
+        return requested
+    for pref in _PREFERRED_OLLAMA_CHAT_MODELS:
+        for cand in chat_candidates:
+            if cand == pref or cand.startswith(pref):
+                return cand
+    return chat_candidates[0]
+
+
 async def probe_local_llm_status(config: LocalLLMConfig | None = None) -> Dict[str, Any]:
     """Probe the configured local LLM daemon (Ollama / LiteLLM / vLLM / llama.cpp) and list available models."""
     cfg = config or get_active_llm_config()
@@ -37,6 +64,7 @@ async def probe_local_llm_status(config: LocalLLMConfig | None = None) -> Dict[s
     discovered_models: List[str] = []
     daemon_online = False
     status_detail = ""
+    effective_model = cfg.model
 
     try:
         async with httpx.AsyncClient(timeout=min(cfg.timeout_seconds, 2.0)) as client:
@@ -48,7 +76,11 @@ async def probe_local_llm_status(config: LocalLLMConfig | None = None) -> Dict[s
                     discovered_models = [
                         m.get("name", "") for m in data.get("models", []) if m.get("name")
                     ]
-                    status_detail = f"Ollama daemon online at {cfg.base_url} ({len(discovered_models)} local models)"
+                    effective_model = _pick_installed_ollama_chat_model(cfg.model, discovered_models)
+                    status_detail = (
+                        f"Ollama online at {cfg.base_url} • Active model: {effective_model} "
+                        f"({len(discovered_models)} local models installed)"
+                    )
                 else:
                     status_detail = f"Ollama returned HTTP {resp.status_code}"
             else:
@@ -70,7 +102,7 @@ async def probe_local_llm_status(config: LocalLLMConfig | None = None) -> Dict[s
     except Exception as exc:
         status_detail = (
             f"Local daemon at {cfg.base_url} not currently reachable ({exc.__class__.__name__}). "
-            "Using deterministic local fallback until local server is started."
+            "Using structured offline synthesis until local server is started."
         )
 
     latency_ms = round((time.perf_counter() - start) * 1000.0, 1)
@@ -79,7 +111,7 @@ async def probe_local_llm_status(config: LocalLLMConfig | None = None) -> Dict[s
         "provider": cfg.provider,
         "provider_label": defaults["label"],
         "base_url": cfg.base_url,
-        "model": cfg.model,
+        "model": effective_model,
         "embedding_model": cfg.embedding_model,
         "temperature": cfg.temperature,
         "daemon_online": daemon_online,
@@ -204,11 +236,14 @@ async def generate_local_rag_synthesis(
     notes_context = "\n".join(f"- {note}" for note in notes_included) or "None provided."
 
     system_prompt = (
-        "You are VECTRA Subgraph Co-Pilot, a sovereign local-only enterprise AI advisory engine. "
-        "Synthesize strictly from the provided canonical nodes, associative edges, verbatim primary citations, "
-        "and private consultant field notes. Respond ONLY with valid JSON matching the required schema: "
-        "{executive_answer: str, architectural_implications: list[str], contrarian_risks: list[str], "
-        "recommended_90_day_actions: list[str]}."
+        "You are VECTRA Subgraph Co-Pilot, a local-only enterprise AI advisory strategist. "
+        "Synthesize strictly from the provided canonical nodes, edges, primary citations, and field notes. "
+        "Write clear, scannable plain English (never output raw node IDs or dense wall-of-text paragraphs): "
+        "1) executive_answer: 2-3 concise sentences directly answering the question with concrete ROI/latency metrics; "
+        "2) architectural_implications: 3-4 specific findings, each starting with the real canonical node name followed by a colon and the takeaway; "
+        "3) contrarian_risks: 2-3 concrete engineering or regulatory failure modes and how to mitigate each; "
+        "4) recommended_90_day_actions: 3 phased execution steps starting with Days 1-30:, Days 31-60:, and Days 61-90:. "
+        "Respond ONLY with valid JSON matching the required schema."
     )
     user_prompt = (
         f"Active Variant Lens: {variant_lens} ({lens_label})\n"
@@ -223,19 +258,29 @@ async def generate_local_rag_synthesis(
         req_timeout = httpx.Timeout(cfg.timeout_seconds, connect=min(cfg.timeout_seconds, 2.0))
         async with httpx.AsyncClient(timeout=req_timeout) as client:
             if cfg.provider == "ollama":
-                resp = await client.post(
-                    f"{cfg.base_url}/api/chat",
-                    json={
-                        "model": cfg.model,
-                        "stream": False,
-                        "format": CopilotLLMGeneration.model_json_schema(),
-                        "options": {"temperature": cfg.temperature},
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                    },
-                )
+                active_model = cfg.model
+                chat_payload = {
+                    "model": active_model,
+                    "stream": False,
+                    "format": CopilotLLMGeneration.model_json_schema(),
+                    "options": {"temperature": cfg.temperature},
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                }
+                resp = await client.post(f"{cfg.base_url}/api/chat", json=chat_payload)
+                if resp.status_code == 404:
+                    tags_resp = await client.get(f"{cfg.base_url}/api/tags")
+                    if tags_resp.status_code == 200:
+                        installed = [
+                            m.get("name", "") for m in tags_resp.json().get("models", []) if m.get("name")
+                        ]
+                        resolved = _pick_installed_ollama_chat_model(cfg.model, installed)
+                        if resolved != active_model:
+                            active_model = resolved
+                            chat_payload["model"] = active_model
+                            resp = await client.post(f"{cfg.base_url}/api/chat", json=chat_payload)
                 if resp.status_code == 200:
                     body = resp.json()
                     content_str = body.get("message", {}).get("content", "")
@@ -243,7 +288,7 @@ async def generate_local_rag_synthesis(
                     return {
                         "generation": parsed,
                         "llm_provider": cfg.provider,
-                        "llm_model": cfg.model,
+                        "llm_model": active_model,
                         "execution_mode": "local_llm",
                         "commercial_models_blocked": cfg.block_commercial_models,
                         "latency_ms": round((time.perf_counter() - start) * 1000.0, 1),

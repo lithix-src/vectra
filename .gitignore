@@ -32,3 +32,5 @@ dist/
 *.log
 *.tar.gz
 .github/workflows/
+.github/dependabot.yml
+.github/dependabot.yaml

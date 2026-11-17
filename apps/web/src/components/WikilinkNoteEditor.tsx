@@ -105,9 +105,7 @@ export default function WikilinkNoteEditor({
     setSaveBanner(null);
     try {
       await onSaveNote(activeNode.id, markdownText, relationType);
-      setSaveBanner(
-        "Saved to consultant_notes & synced [[wikilink]] edges on WebGL graph"
-      );
+      setSaveBanner("Field note saved and topic links updated on the Knowledge Map.");
     } finally {
       setSaving(false);
     }
@@ -121,28 +119,28 @@ export default function WikilinkNoteEditor({
 
   return (
     <div id="obsidian-wikilink-editor" className="flex flex-col gap-2.5">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-mono uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
-          <Link2 className="w-3.5 h-3.5" /> Obsidian [[Wikilink]] Field Notes (RLS: user_private)
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-sky-300 flex items-center gap-1.5">
+          <Link2 className="w-3.5 h-3.5 text-sky-400" /> Private Field Notes
         </span>
         <select
           id="wikilink-relation-select"
           value={relationType}
           onChange={(e) => setRelationType(e.target.value as RelationType)}
-          className="bg-[#090D14] border border-slate-700 rounded px-2 py-0.5 text-[11px] font-mono text-slate-200"
+          className="bg-[#090D14] border border-slate-700 rounded px-2 py-0.5 text-[11px] text-slate-200"
         >
-          <option value="ENABLES">Edge: ENABLES</option>
-          <option value="CASE_STUDY_OF">Edge: CASE_STUDY_OF</option>
-          <option value="REGULATES">Edge: REGULATES</option>
-          <option value="CONFLICTS_WITH">Edge: CONFLICTS_WITH</option>
-          <option value="REPLACES">Edge: REPLACES</option>
+          <option value="ENABLES">Link Type: Enables</option>
+          <option value="CASE_STUDY_OF">Link Type: Case Study</option>
+          <option value="REGULATES">Link Type: Regulates</option>
+          <option value="CONFLICTS_WITH">Link Type: Conflicts With</option>
+          <option value="REPLACES">Link Type: Replaces</option>
         </select>
       </div>
 
-      {/* Quick-Insert [[Wikilink]] Node Pills */}
+      {/* Quick-Insert Topic Link Pills */}
       <div className="bg-[#090D14] border border-slate-800 rounded p-2">
-        <div className="text-[10px] font-mono uppercase text-slate-400 mb-1.5">
-          Quick Insert Bidirectional [[Wikilink]] to Canonical Node:
+        <div className="text-[10.5px] text-slate-400 mb-1.5">
+          Click any topic below (or type <code className="text-sky-300">[[</code>) to link it to this note:
         </div>
         <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
           {allNodes
@@ -153,10 +151,10 @@ export default function WikilinkNoteEditor({
                 id={`quick-wikilink-${target.slug}`}
                 type="button"
                 onClick={() => insertWikilinkTarget(target.title)}
-                className="text-left px-2 py-0.5 rounded bg-slate-900 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-400/60 text-[11px] font-mono text-amber-300 transition truncate max-w-[260px]"
-                title={`Insert [[${target.title}]]`}
+                className="text-left px-2 py-0.5 rounded bg-slate-900 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-400/60 text-[11px] text-amber-300 transition truncate max-w-[260px]"
+                title={`Link to ${target.title}`}
               >
-                + [[{target.title.slice(0, 32)}…]]
+                + {target.title.slice(0, 34)}…
               </button>
             ))}
         </div>
@@ -169,8 +167,8 @@ export default function WikilinkNoteEditor({
           value={markdownText}
           onChange={handleTextareaChange}
           rows={6}
-          placeholder="Type private consultant field notes... Use [[Node Title]] to dynamically create an associative edge on the graph."
-          className="w-full bg-[#090D14] border border-slate-700 focus:border-sky-400 rounded p-2.5 text-xs font-mono text-slate-100 leading-relaxed focus:outline-none"
+          placeholder="Add private advisory notes... Wrap [[Topic Title]] in double brackets to link topics on the map."
+          className="w-full bg-[#090D14] border border-slate-700 focus:border-sky-400 rounded p-2.5 text-xs text-slate-100 leading-relaxed focus:outline-none"
         />
 
         {/* Hidden/Synced TipTap Rich Surface for ProseMirror inspection */}
@@ -184,8 +182,8 @@ export default function WikilinkNoteEditor({
             id="wikilink-autocomplete-dropdown"
             className="absolute left-2 right-2 bottom-full mb-1 z-30 bg-[#101722] border border-sky-500/60 rounded shadow-xl max-h-40 overflow-y-auto p-1"
           >
-            <div className="px-2 py-1 text-[10px] font-mono uppercase text-sky-400 border-b border-slate-800">
-              Select Canonical Node to Link ([[{autocompleteQuery}):
+            <div className="px-2 py-1 text-[10px] font-medium text-sky-400 border-b border-slate-800">
+              Choose topic to link ([[{autocompleteQuery}):
             </div>
             {candidateNodes.map((cand) => (
               <button
@@ -210,10 +208,10 @@ export default function WikilinkNoteEditor({
           type="button"
           disabled={saving}
           onClick={handleSave}
-          className="w-full py-2 px-3 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs font-mono uppercase tracking-wider transition flex items-center justify-center gap-1.5"
+          className="w-full py-2 px-3 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs transition flex items-center justify-center gap-1.5"
         >
           <Sparkles className="w-3.5 h-3.5" />
-          {saving ? "Syncing [[Wikilinks]] to Graph..." : "Save Field Note & Sync [[Wikilink]] Edges"}
+          {saving ? "Saving Note & Updating Links..." : "Save Note & Update Links"}
         </button>
       </div>
 
